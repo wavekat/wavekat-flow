@@ -1,0 +1,5 @@
+{
+  "description": "schema_version 2 does not validate against the v1 schema (const 1). The semantic validator reports unsupported_schema_version.",
+  "structurallyValid": false,
+  "semantic": { "ok": false, "errors": ["unsupported_schema_version"] }
+}

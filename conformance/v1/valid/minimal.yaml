@@ -1,0 +1,12 @@
+schema_version: 1
+id: flow_min
+name: Minimal greeting then hangup
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Hi there.
+    exits: { next: bye }
+  bye:
+    kind: hangup
+    prompt: Goodbye.

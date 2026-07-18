@@ -1,0 +1,35 @@
+schema_version: 1
+id: flow_9f2
+name: Luigi's — after hours
+version: 3
+entry: welcome
+nodes:
+  welcome:
+    kind: greeting
+    prompt: Thanks for calling Luigi's!
+    exits: { next: check_hours }
+  check_hours:
+    kind: hours
+    timezone: America/New_York
+    schedule:
+      tue: [{ open: "11:00", close: "22:00" }]
+    exits: { open: front_desk, closed: night_menu }
+  front_desk:
+    kind: ring
+    timeout_secs: 25
+    exits: { no_answer: take_message }
+  night_menu:
+    kind: menu
+    prompt: >-
+      We're closed right now. Press 1 for our opening hours,
+      or stay on the line to leave a message.
+    options: { "1": Opening hours }
+    retries: 1
+    exits: { "1": say_hours, no_input: take_message, invalid: take_message }
+  say_hours:
+    kind: greeting
+    prompt: We're open Tuesday to Sunday, eleven to ten.
+    exits: { next: take_message }
+  take_message:
+    kind: message
+    prompt: Please leave your name and number after the tone.

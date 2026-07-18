@@ -1,0 +1,5 @@
+{
+  "description": "kind: teleport matches no component variant. Structurally invalid — no oneOf branch accepts it.",
+  "structurallyValid": false,
+  "semantic": { "ok": false, "errors": ["unknown_kind"] }
+}

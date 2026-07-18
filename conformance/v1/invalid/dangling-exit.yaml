@@ -1,0 +1,9 @@
+schema_version: 1
+id: flow_dangle
+name: Exit points at a missing node
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Hi.
+    exits: { next: nowhere }

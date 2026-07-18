@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate types from schema and fail on drift
+        run: |
+          pnpm --filter @wavekat/flow-schema gen
+          if ! git diff --exit-code -- packages/flow-schema/src/generated; then
+            echo "::error::generated types are stale — run 'pnpm --filter @wavekat/flow-schema gen' and commit"
+            exit 1
+          fi
+      - run: pnpm --filter @wavekat/flow-schema typecheck
+      - run: pnpm --filter @wavekat/flow-schema test
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test (types regenerate from the schema on build)
+        run: cargo test -p wavekat-flow

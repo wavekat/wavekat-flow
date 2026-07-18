@@ -1,0 +1,5 @@
+{
+  "description": "Smallest valid flow: greeting → hangup. version omitted (defaults to 1); audio-less text prompts; hangup goodbye.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

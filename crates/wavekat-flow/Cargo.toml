@@ -1,0 +1,29 @@
+[package]
+name = "wavekat-flow"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Declarative call-flow (\"Receptionist\") document model for the WaveKat voice platform. Types are generated from the normative JSON Schema (schema/flow.v1.schema.json), the single source of truth shared with the @wavekat/flow-schema npm package."
+# Kept private until the repo goes public (see README "Roadmap" phase 3),
+# then flipped to publish the crate to crates.io. Guard against a stray
+# `cargo publish` until then.
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+typify = "0.4"
+schemars = "0.8"
+serde_json = "1"
+prettyplease = "0.2"
+syn = "2"
+
+[dev-dependencies]
+serde_yaml_ng = "0.10"
+jsonschema = "0.29"
+serde_json = "1"

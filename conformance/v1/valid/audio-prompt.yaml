@@ -1,0 +1,14 @@
+schema_version: 1
+id: flow_audio
+name: Generated-clip prompts
+entry: welcome
+nodes:
+  welcome:
+    kind: greeting
+    prompt: { audio: vprompt_ab12cd34 }
+    exits: { next: vm }
+  vm:
+    kind: message
+    prompt: { audio: vprompt_ff00ee11 }
+    max_secs: 90
+    tone: none

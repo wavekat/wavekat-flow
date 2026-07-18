@@ -1,0 +1,5 @@
+{
+  "description": "doc 48 canonical example: greeting → hours → ring/menu → message. Fully valid.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

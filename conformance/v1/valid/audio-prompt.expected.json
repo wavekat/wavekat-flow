@@ -1,0 +1,5 @@
+{
+  "description": "Exercises the { audio: ref } prompt form and the message node's max_secs + tone: none override.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

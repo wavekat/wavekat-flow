@@ -1,0 +1,8 @@
+schema_version: 1
+id: flow_bad
+name: Unknown component kind
+entry: start
+nodes:
+  start:
+    kind: teleport
+    prompt: Beam me up.

@@ -1,0 +1,5 @@
+{
+  "description": "Structurally VALID but semantically invalid: the `next` exit targets a node id that does not exist. This case documents the boundary — JSON Schema cannot catch dangling references; the semantic validator must. structurallyValid is true; the semantic check fails.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["unknown_target"] }
+}

@@ -1,0 +1,5 @@
+{
+  "description": "A menu node omits the required `options` map. Structurally invalid — MenuNode requires options.",
+  "structurallyValid": false,
+  "semantic": { "ok": false, "errors": ["missing_field"] }
+}
