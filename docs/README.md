@@ -1,5 +1,10 @@
 # docs/
 
+- **[roadmap.md](./roadmap.md)** — the phased TODO list (Phase 2 consolidation,
+  Phase 3 publish & adopt, open questions). Start here for what's left to do.
+
+## The format spec
+
 The prose specification of the call-flow format is **doc 48
 ("IVR call flows")**, which currently lives in the `wavekat-voice` repo
 (`docs/48-ivr-call-flows.md`). Its "Placement" section is the design basis for
