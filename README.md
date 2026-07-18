@@ -63,7 +63,7 @@ language and **pinned by the shared corpus**, not generated. See
 This repo is being stood up in phases. Consumers are **not** migrated until
 the repo is public (decision on record), so phases 1–2 are self-contained here.
 The detailed, checkbox-level task list lives in
-**[`docs/roadmap.md`](./docs/roadmap.md)**.
+**[`docs/ROADMAP.md`](./docs/ROADMAP.md)**.
 
 - **Phase 1 — foundation (this milestone).** The normative schema, the
   conformance corpus + back-compat runner, and both packages generating their

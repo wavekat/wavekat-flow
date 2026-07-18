@@ -58,3 +58,6 @@ publish` / `cargo publish` before then.
 - Commits & PR titles: Conventional Commits (`feat:`, `fix:`, `docs:`, …),
   under 50 chars.
 - License: Apache-2.0 (matches the other public WaveKat crates).
+- **Docs naming**: numbered `NN-name.md` (e.g. `48-ivr-call-flows.md`) for
+  design docs / feature plans that progress over a lifecycle; `UPPERCASE.md`
+  (e.g. `ROADMAP.md`) for persistent meta docs that evolve in place.

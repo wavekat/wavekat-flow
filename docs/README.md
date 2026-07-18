@@ -1,7 +1,14 @@
 # docs/
 
-- **[roadmap.md](./roadmap.md)** — the phased TODO list (Phase 2 consolidation,
+- **[ROADMAP.md](./ROADMAP.md)** — the phased TODO list (Phase 2 consolidation,
   Phase 3 publish & adopt, open questions). Start here for what's left to do.
+
+## Naming convention
+
+- **`NN-name.md`** (numbered, e.g. `48-ivr-call-flows.md`) — design docs and
+  feature plans that *progress* over a lifecycle. These get a sequence number.
+- **`UPPERCASE.md`** (e.g. `ROADMAP.md`) — persistent meta docs that are always
+  present and evolve in place rather than being versioned (roadmap, todo, etc.).
 
 ## The format spec
 
