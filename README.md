@@ -1,6 +1,11 @@
-# wavekat-flow
+<p align="center">
+  <a href="https://github.com/wavekat/wavekat-flow">
+    <img src="https://github.com/wavekat/wavekat-brand/raw/main/assets/banners/wavekat-flow-narrow.svg" alt="WaveKat Flow">
+  </a>
+</p>
 
-**Single source of truth for the WaveKat call-flow ("Receptionist") document format.**
+Single source of truth for the [WaveKat](https://wavekat.com) call-flow
+("Receptionist") document format.
 
 A *flow* is the declarative IVR document that powers WaveKat voice lines — a
 greeting, an hours check, a menu, voicemail, a transfer — authored as YAML,
@@ -104,4 +109,6 @@ After editing `schema/flow.v1.schema.json`, run `pnpm --filter
 
 ## License
 
-Apache-2.0.
+Licensed under [Apache 2.0](LICENSE).
+
+Copyright 2026 WaveKat.

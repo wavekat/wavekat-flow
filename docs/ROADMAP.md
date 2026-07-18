@@ -99,6 +99,10 @@ Trigger: the format is stable enough and the repo is ready to be public.
 - [ ] TS: `release-please`.
 - [ ] Add the publish workflows (npm + crates.io tokens) — currently omitted so
       nothing can publish before this phase.
+- [ ] Add README badges (crates.io + docs.rs, and an npm badge for the TS
+      package) once published — omitted now because they would 404 for an
+      unpublished, private repo. Match the banner+badges header of the sibling
+      crates (`wavekat-core`, `wavekat-turn`).
 
 ### Flip public + migrate consumers
 - [ ] Make the GitHub repo public.
