@@ -17,6 +17,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./structure": {
+      "types": "./dist/structure.d.ts",
+      "import": "./dist/structure.js"
+    },
     "./schema/v1": "./dist/generated/flow.v1.schema.json"
   },
   "files": [

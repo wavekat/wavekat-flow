@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import { checkFlow, validateStructure } from '../src/index.js';
+import { checkFlow } from '../src/index.js';
+import { validateStructure } from '../src/structure.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const corpusRoot = resolve(here, '..', '..', '..', 'conformance', 'v1');
