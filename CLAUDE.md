@@ -54,9 +54,11 @@ shared tests. See `README.md` for the full design and the phased roadmap.
 Both packages are **published** (`@wavekat/flow-schema` on npm, `wavekat-flow`
 on crates.io) and stay `0.0.x` until the consumer repos have adopted them. Do
 not `npm publish` / `cargo publish` manually — releases are cut by the
-automation: `release-please` (TS, tags `flow-schema-vX.Y.Z`) and `release-plz`
-(Rust, tags `wavekat-flow-vX.Y.Z`) maintain release PRs; merging a release PR
-publishes. Publish jobs are gated on the `RELEASE_ENABLED` repo variable
+automation: `release-please` maintains **one combined release PR** covering
+both packages (tags `flow-schema-vX.Y.Z` and `wavekat-flow-vX.Y.Z`); merging
+it publishes whichever packages had releasable commits. The crate's `version`
+is deliberately literal in its own `Cargo.toml` (not workspace-inherited) so
+release-please can bump it. Publish jobs are gated on the `RELEASE_ENABLED` repo variable
 (set). npm auth is trusted publishing (OIDC — no token; the npm package trusts
 `release-please.yml` in this repo, so renaming that file breaks publishing);
 crates.io auth is the org-level `CARGO_REGISTRY_TOKEN` secret.

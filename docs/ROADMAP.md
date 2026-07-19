@@ -135,7 +135,10 @@ Trigger: the format is stable enough and the repo is ready to be public.
       consumer repos have adopted the published packages.
 
 ### Release automation (match house style)
-- [x] Rust: `release-plz` (workflow shape from `wavekat-platform-client`, on
+- [x] (Superseded at 0.0.2: Rust releases folded into release-please — one
+      combined release PR for both packages, `cargo-workspace` plugin, same
+      `wavekat-flow-vX.Y.Z` tag stream; release-plz removed.)
+      Rust: `release-plz` (workflow shape from `wavekat-platform-client`, on
       hosted runners like the rest of this repo's CI). Tags
       `wavekat-flow-vX.Y.Z` (crate-name prefix so the two tag streams in this
       repo can't collide).
