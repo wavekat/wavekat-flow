@@ -54,9 +54,11 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
       (`unknown_target`, matching the frozen corpus).
 - [x] `hours.rs` — timezone/date math (`time`, `time-tz` deps came along).
       `validate_config` is piece-based (unchanged); `evaluate` takes `&Node`.
-- [ ] `engine.rs` — interpreter + the `FlowEffects` async trait **definition**
+- [x] `engine.rs` — interpreter + the `FlowEffects` async trait **definition**
       (the daemon keeps its `CallFlowEffects` *impl* in `wavekat-voice`).
-- [ ] `trace.rs` — Serialize-only run trace (output format, not document shape).
+      Matches on the generated `Node` directly; `goto`/menu use `node.exits()`.
+- [x] `trace.rs` — Serialize-only run trace (output format, not document
+      shape); `flow_version` is `u64` to match the generated `Flow`.
 - [x] ⚠️ Reconcile the generated `Node` shape. It was **worse** than the note
       assumed: typify emitted an `#[serde(untagged)]` enum with `kind:
       serde_json::Value`, which mis-discriminated (a `menu` deserialized as a
@@ -68,8 +70,9 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
       (`kind`, `is_terminal`, `required_exits`, `exits`, `Prompt::as_text`,
       `Flow::from_yaml`) live in `src/model_ext.rs` — the Rust twin of
       `model.ts` (logic, not shape).
-- [ ] Bring the `dev-dependency` on `tokio` for the engine's async scenario
-      tests (arrives with `engine.rs`).
+- [x] Bring the `dev-dependency` on `tokio` for the engine's async scenario
+      tests. (`anyhow` + `async-trait` also came along, as deps — the public
+      `FlowEffects` trait signature uses them.)
 
 ### Corpus — turn on the semantic half
 - [x] Wire the `semantic` field of each `*.expected.json` into **both** test

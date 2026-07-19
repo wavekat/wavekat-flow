@@ -6,11 +6,12 @@
 //! source of truth shared with the `@wavekat/flow-schema` npm package.
 //! See `build.rs`.
 //!
-//! Phase 2 (this milestone) adds the semantic validator ([`validate`]) and
-//! the hours/timezone math ([`hours`]) alongside the generated model,
-//! adapted to the generated types and pinned by the shared conformance
-//! corpus. The interpreter/engine and comment-preserving mutation stay in
-//! the `wavekat-voice` daemon for now (later Phase 2 steps).
+//! Phase 2 (this milestone) adds the semantic validator ([`validate`]), the
+//! hours/timezone math ([`hours`]), and the interpreter ([`engine`] + its
+//! [`trace`] output) alongside the generated model, adapted to the generated
+//! types and pinned by the shared conformance corpus. The engine owns the
+//! [`engine::FlowEffects`] trait *definition*; the daemon keeps its live impl
+//! in `wavekat-voice`. Comment-preserving mutation stays TS-only.
 
 /// The generated document model (`Flow`, `Node`, `Prompt`, …), emitted
 /// from the schema by `typify` into `OUT_DIR/flow_types.rs`.
@@ -28,7 +29,9 @@ pub mod model {
 /// Hand-written helpers layered on the generated model (logic, not shape).
 mod model_ext;
 
+pub mod engine;
 pub mod hours;
+pub mod trace;
 pub mod validate;
 
 pub use model::*;
