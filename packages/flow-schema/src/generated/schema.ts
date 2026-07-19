@@ -54,9 +54,11 @@ const schema = {
       "description": "What a component speaks: TTS text (a bare string) or a reference to a pre-rendered audio asset shipped alongside the flow.",
       "oneOf": [
         {
+          "title": "Text",
           "type": "string"
         },
         {
+          "title": "Audio",
           "type": "object",
           "required": [
             "audio"

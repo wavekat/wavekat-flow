@@ -8,15 +8,8 @@ export type Node = GreetingNode | HoursNode | MenuNode | RingNode | MessageNode 
 /**
  * What a component speaks: TTS text (a bare string) or a reference to a pre-rendered audio asset shipped alongside the flow.
  */
-export type Prompt =
-  | string
-  | {
-      /**
-       * Audio asset ref. A generated-clip ref is a voice_prompts id matching ^vprompt_[a-z0-9]+$.
-       */
-      audio: string;
-      [k: string]: unknown;
-    };
+export type Prompt = Text | Audio;
+export type Text = string;
 /**
  * The cue a message node plays between its prompt and the start of recording.
  */
@@ -67,6 +60,13 @@ export interface GreetingNode {
   kind: 'greeting';
   prompt: Prompt;
   exits?: Exits;
+  [k: string]: unknown;
+}
+export interface Audio {
+  /**
+   * Audio asset ref. A generated-clip ref is a voice_prompts id matching ^vprompt_[a-z0-9]+$.
+   */
+  audio: string;
   [k: string]: unknown;
 }
 /**
