@@ -47,6 +47,21 @@ pub enum HoursError {
     NonPositiveRange { open: String, close: String },
 }
 
+impl HoursError {
+    /// Stable snake_case code, shared with the TypeScript validator
+    /// (`hours.ts`) and the conformance corpus. The Rust validator surfaces
+    /// these through [`crate::validate::ValidationError::code`] so both
+    /// languages report the same hours code for the same defect.
+    pub fn code(&self) -> &'static str {
+        match self {
+            HoursError::UnknownTimezone(_) => "unknown_timezone",
+            HoursError::BadTime(_) => "bad_time",
+            HoursError::BadDate(_) => "bad_date",
+            HoursError::NonPositiveRange { .. } => "non_positive_range",
+        }
+    }
+}
+
 /// Resolve an IANA zone name, or [`HoursError::UnknownTimezone`].
 pub fn resolve_tz(name: &str) -> Result<&'static Tz, HoursError> {
     timezones::get_by_name(name).ok_or_else(|| HoursError::UnknownTimezone(name.to_string()))

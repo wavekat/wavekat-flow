@@ -1,0 +1,5 @@
+{
+  "description": "Structurally valid, semantically invalid: `orphan` is not reachable from entry. JSON Schema cannot see graph reachability; the semantic validator must.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["unreachable"] }
+}

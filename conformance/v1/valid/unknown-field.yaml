@@ -1,0 +1,14 @@
+schema_version: 1
+id: flow_unknown
+name: Unknown fields are accepted
+entry: hello
+color: purple
+nodes:
+  hello:
+    kind: greeting
+    prompt: Hi.
+    exits: { next: bye }
+    volume: 11
+  bye:
+    kind: hangup
+    prompt: Bye.

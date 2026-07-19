@@ -1,0 +1,9 @@
+schema_version: 1
+id: flow_unexpected
+name: Stray exit on a terminal
+entry: g
+nodes:
+  g:
+    kind: hangup
+    prompt: Bye.
+    exits: { next: g }

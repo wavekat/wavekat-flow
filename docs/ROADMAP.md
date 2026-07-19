@@ -81,12 +81,19 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
       since a single defect can cascade (e.g. dangling→trapped). Rust maps serde
       parse failures to codes (`missing_field`, `unknown_kind`) alongside
       `ValidationError::code()`.
-- [ ] Add regression cases for the reachability/trap/exit-exactness rules and the
-      hours edge cases (overnight rejected, DST, holiday exception override).
-- [ ] ⚠️ Encode the one deliberate divergence: unknown fields are a
+- [x] Add regression cases for the reachability/trap/exit-exactness rules and the
+      hours edge cases: `invalid/{unreachable,trapped,unexpected-exit,
+      overnight-hours,bad-timezone}` and `valid/hours-holiday` (holiday exception
+      override). Forced a cross-language fix: Rust wrapped all hours defects as
+      one `hours` code; now `ValidationError::Hours` delegates to
+      `HoursError::code()` so both languages report the specific code
+      (`non_positive_range`, `unknown_timezone`, …). (DST-specific corpus cases
+      still worth adding later; `hours.rs`'s DST math is unit-tested.)
+- [x] ⚠️ Encode the one deliberate divergence: unknown fields are a
       non-blocking `unknown_field` **warning** in TS and silently ignored by
-      Rust serde — both still *accept* the document. The corpus must treat these
-      as accepted, with the TS-only warning asserted separately.
+      Rust serde — both still *accept* the document. `valid/unknown-field` +
+      an optional `tsWarnings` field in `*.expected.json`, asserted by the TS
+      suite and ignored by Rust.
 
 ### Housekeeping
 - [ ] Source shared constants (`SUPPORTED_SCHEMA_VERSIONS`, `MAX_PROMPT_CHARS`,

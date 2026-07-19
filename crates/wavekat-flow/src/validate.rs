@@ -99,7 +99,9 @@ impl ValidationError {
             ValidationError::UnexpectedExits { .. } => "unexpected_exits",
             ValidationError::EmptyMenu { .. } => "empty_menu",
             ValidationError::BadDigit { .. } => "bad_digit",
-            ValidationError::Hours { .. } => "hours",
+            // Delegate to the inner hours code so both languages report the
+            // same code for a hours defect (TS surfaces it directly).
+            ValidationError::Hours { source, .. } => source.code(),
             ValidationError::EmptyTransferTarget { .. } => "empty_transfer_target",
             ValidationError::PromptTooLong { .. } => "prompt_too_long",
             ValidationError::Unreachable { .. } => "unreachable",

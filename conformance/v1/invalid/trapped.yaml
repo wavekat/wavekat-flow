@@ -1,0 +1,13 @@
+schema_version: 1
+id: flow_trap
+name: Terminal-less loop
+entry: a
+nodes:
+  a:
+    kind: greeting
+    prompt: one
+    exits: { next: b }
+  b:
+    kind: greeting
+    prompt: two
+    exits: { next: a }
