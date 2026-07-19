@@ -143,13 +143,12 @@ Trigger: the format is stable enough and the repo is ready to be public.
       Component `flow-schema`, tags `flow-schema-vX.Y.Z`; pre-major bump
       config keeps `feat:`/`fix:` on `0.0.x` patch bumps. Manifest starts at
       `0.0.0` so the first cut release is the as-yet-unpublished `0.0.1`.
-- [x] Publish workflows exist but are **dead switches**: both publish jobs are
-      gated on the `RELEASE_ENABLED` repository variable (unset) and need the
-      `NPM_TOKEN` / `CARGO_REGISTRY_TOKEN` secrets (unset), so nothing can
-      reach a registry while the repo is private. Go-public flip = set the
-      variable + add the two tokens (see "Flip public" below). Note: the
-      `wavekat-flow` crates.io name and `@wavekat/flow-schema` npm scope are
-      claimed only at first publish.
+- [x] Publish switches flipped (2026-07-19): `RELEASE_ENABLED` set, both
+      `0.0.1` releases published — the `wavekat-flow` crates.io name and
+      `@wavekat/flow-schema` npm scope are claimed. npm auth is trusted
+      publishing (OIDC, no stored token; the npm package trusts
+      `release-please.yml` in this repo); crates.io auth is the org-level
+      `CARGO_REGISTRY_TOKEN` secret.
 - [ ] Add README badges (crates.io + docs.rs, and an npm badge for the TS
       package) once published — omitted now because they would 404 for an
       unpublished, private repo. Match the banner+badges header of the sibling
@@ -157,7 +156,8 @@ Trigger: the format is stable enough and the repo is ready to be public.
 
 ### Flip public + migrate consumers
 - [ ] Make the GitHub repo public.
-- [ ] Publish `@wavekat/flow-schema` (npm) and `wavekat-flow` (crates.io).
+- [x] Publish `@wavekat/flow-schema` (npm) and `wavekat-flow` (crates.io) —
+      both at `0.0.1`, 2026-07-19 (published ahead of the repo going public).
 - [ ] `wavekat-platform`: delete `packages/flow-schema`, depend on the published
       npm package. Import paths are unchanged, so this is a dependency swap.
 - [ ] `wavekat-voice`: replace the `crates/wavekat-flow` path crate with the
