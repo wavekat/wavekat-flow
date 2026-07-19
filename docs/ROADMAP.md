@@ -4,7 +4,7 @@ Living checklist for finishing the consolidation. Phase 1 (foundation) is done
 and on `main`; this file tracks what remains. See the top-level `README.md` for
 the why, and `CLAUDE.md` for the non-negotiables.
 
-Legend: `[ ]` todo · `[x]` done · ⚠️ correctness-sensitive.
+Legend: `[ ]` todo · `[~]` partial · `[x]` done · ⚠️ correctness-sensitive.
 
 ---
 
@@ -29,22 +29,24 @@ copy per language, adapted to the **generated** types, covered by the corpus.
 Nothing is migrated in the consumer repos yet (that's Phase 3).
 
 ### TypeScript — move from `wavekat-platform/packages/flow-schema/src`
-- [ ] `parse.ts` — safe-subset YAML decode (anchors/aliases/tags/dup-keys/
+- [x] `parse.ts` — safe-subset YAML decode (anchors/aliases/tags/dup-keys/
       implicit-typing rejection, `nodeRanges` source offsets).
 - [ ] `mutate.ts` — comment-preserving edits (stays TS-only; the daemon never
       edits). Depends on the `yaml` CST, not the generated types.
-- [ ] `validate.ts` — reachability BFS, caller-trap, exit-set exactness, DTMF,
-      prompt length.
-- [ ] `hours.ts` — `HH:MM`/date/IANA-tz checks, `open<close`, no overnight.
-- [ ] `check.ts` (parse+validate gate) and `issues.ts` (`Issue`, `hasErrors`,
+- [x] `validate.ts` — reachability BFS, caller-trap, exit-set exactness, DTMF,
+      prompt length. ⚠️ dangling-target code reconciled to the frozen corpus:
+      `unknown_exit_target` → `unknown_target`.
+- [x] `hours.ts` — `HH:MM`/date/IANA-tz checks, `open<close`, no overnight.
+- [x] `check.ts` (parse+validate gate) and `issues.ts` (`Issue`, `hasErrors`,
       `MISSING_ASSET`).
-- [ ] Decide the fate of the model helpers currently in `model.ts`
+- [x] Decide the fate of the model helpers currently in `model.ts`
       (`isTerminal`, `requiredExits`, `promptText`, `promptAudio`,
-      `isGeneratedClipRef`, `requiredAssets`): keep as hand-written functions
-      layered on the generated types (recommended) — they are logic, not shape.
-- [ ] Adapt every import from the old hand-written `model.ts` to
-      `src/generated/model.ts`.
-- [ ] Port the existing `*.test.ts` suites; fold their fixtures into the corpus.
+      `isGeneratedClipRef`, `requiredAssets`): kept as hand-written functions
+      layered on the generated types in `src/model.ts` — they are logic, not shape.
+- [x] Adapt every import from the old hand-written `model.ts` to
+      `src/model.ts` (which re-exports `src/generated/model.ts`).
+- [x] Port the existing `*.test.ts` suites (`parse`, `validate`, `refs`); the
+      `mutate` suite waits on `mutate.ts` above.
 
 ### Rust — move from `wavekat-voice/crates/wavekat-flow/src`
 - [ ] `validate.rs` — the semantic twin of `validate.ts` (must agree via corpus).
@@ -61,8 +63,10 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
 - [ ] Bring the `dev-dependency` on `tokio` for the engine's async scenario tests.
 
 ### Corpus — turn on the semantic half
-- [ ] Wire the `semantic` field of each `*.expected.json` into **both** test
-      suites (today only `structurallyValid` is asserted).
+- [~] Wire the `semantic` field of each `*.expected.json` into **both** test
+      suites (today only `structurallyValid` is asserted). **TS done** (subset
+      match: `valid === semantic.ok` + every listed code reported, since a single
+      defect can cascade e.g. dangling→trapped); Rust pending (Phase 2 step 4).
 - [ ] Add regression cases for the reachability/trap/exit-exactness rules and the
       hours edge cases (overnight rejected, DST, holiday exception override).
 - [ ] ⚠️ Encode the one deliberate divergence: unknown fields are a
