@@ -3,8 +3,9 @@
 // (see CLAUDE.md "Structure vs. semantics"); the values and functions here
 // are *logic*, not shape — the exit set a kind must wire, DTMF digit set,
 // prompt-length cap, terminal-ness — so they live in code, one twin per
-// language (the Rust twin is `crates/wavekat-flow/src/model.rs`). When you
-// change anything here, check the Rust side first.
+// language. The Rust twins are `crates/wavekat-flow/src/model_ext.rs`
+// (helpers) and `validate.rs` / `lib.rs` (the shared constants). When you
+// change anything here, update the Rust side to match.
 
 import type { Flow, MessageTone, Node, Prompt } from './generated/model.js';
 
@@ -42,15 +43,21 @@ export type FlowNode = Node;
  */
 export type Component = Node;
 
-// ── Shared constants (the Rust twin re-declares these in model.rs) ────────
+// ── Shared constants ─────────────────────────────────────────────────────
+// Kept in lockstep with the Rust twins (per-const pointers below); the
+// handful of values here don't justify a shared-codegen step. Component
+// defaults live in the schema itself, so those are single-sourced already.
 
-/** Schema versions this validator understands. */
+/** Schema versions this validator understands. Twin: `lib.rs`
+ * `SUPPORTED_SCHEMA_VERSIONS`. */
 export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1];
 
-/** Longest a spoken (text) prompt may be — see `validate.ts`. */
+/** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
+ * `validate.rs` `MAX_PROMPT_CHARS`. */
 export const MAX_PROMPT_CHARS = 2000;
 
-/** The DTMF keys a `menu` option may be keyed by. */
+/** The DTMF keys a `menu` option may be keyed by. Twin: `validate.rs`
+ * `VALID_DIGITS`. */
 export const VALID_DIGITS: readonly string[] = [
   '0',
   '1',
@@ -83,7 +90,7 @@ export type ComponentKind = (typeof COMPONENT_KINDS)[number];
 /**
  * What a `message` node plays between its prompt and the start of
  * recording — the caller's "start talking now" cue. A closed set: the Rust
- * engine rejects values it doesn't know (`model.rs` `MessageTone`).
+ * engine rejects values it doesn't know (the generated `MessageTone` enum).
  */
 export const MESSAGE_TONES = ['beep', 'none'] as const;
 

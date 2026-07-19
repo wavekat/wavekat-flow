@@ -42,5 +42,6 @@ pub use model_ext::NodeId;
 /// crate.
 pub const FLOW_V1_SCHEMA: &str = include_str!("../../../schema/flow.v1.schema.json");
 
-/// Schema versions this crate's model describes.
+/// Schema versions this crate's model describes. Twin:
+/// `packages/flow-schema/src/model.ts` `SUPPORTED_SCHEMA_VERSIONS`.
 pub const SUPPORTED_SCHEMA_VERSIONS: &[u32] = &[1];
