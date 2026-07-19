@@ -31,8 +31,9 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
 ### TypeScript — move from `wavekat-platform/packages/flow-schema/src`
 - [x] `parse.ts` — safe-subset YAML decode (anchors/aliases/tags/dup-keys/
       implicit-typing rejection, `nodeRanges` source offsets).
-- [ ] `mutate.ts` — comment-preserving edits (stays TS-only; the daemon never
-      edits). Depends on the `yaml` CST, not the generated types.
+- [x] `mutate.ts` — comment-preserving edits (stays TS-only; the daemon never
+      edits). Works on the `yaml` CST, not the generated types; only import
+      from the model is `ComponentKind`. 20-case suite ported.
 - [x] `validate.ts` — reachability BFS, caller-trap, exit-set exactness, DTMF,
       prompt length. ⚠️ dangling-target code reconciled to the frozen corpus:
       `unknown_exit_target` → `unknown_target`.
