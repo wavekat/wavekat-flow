@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.2...flow-schema-v0.0.3) (2026-07-19)
+
+
+### Bug Fixes
+
+* avoid JSON import attributes in dist ([#24](https://github.com/wavekat/wavekat-flow/issues/24)) ([33fdfb5](https://github.com/wavekat/wavekat-flow/commit/33fdfb56433853c6196e9f9d11d315acae121046))
+
 ## [0.0.2](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.1...flow-schema-v0.0.2) (2026-07-19)
 
 
