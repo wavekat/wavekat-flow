@@ -21,10 +21,12 @@ use crate::SUPPORTED_SCHEMA_VERSIONS;
 
 /// Longest a spoken (text) prompt may be. A backstop against a pasted-essay
 /// prompt that would trap a caller under minutes of TTS; generous enough that
-/// no real greeting hits it. Audio-asset prompts are unbounded here.
+/// no real greeting hits it. Audio-asset prompts are unbounded here. Twin:
+/// `packages/flow-schema/src/model.ts` `MAX_PROMPT_CHARS`.
 const MAX_PROMPT_CHARS: usize = 2000;
 
-/// The DTMF keys a `menu` option may be keyed by.
+/// The DTMF keys a `menu` option may be keyed by. Twin:
+/// `packages/flow-schema/src/model.ts` `VALID_DIGITS`.
 const VALID_DIGITS: &[&str] = &["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#"];
 
 /// One thing wrong with a flow document. Carries enough context (node id,

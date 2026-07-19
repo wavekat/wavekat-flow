@@ -96,10 +96,15 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
       suite and ignored by Rust.
 
 ### Housekeeping
-- [ ] Source shared constants (`SUPPORTED_SCHEMA_VERSIONS`, `MAX_PROMPT_CHARS`,
-      `VALID_DIGITS`, defaults) from one place instead of re-declaring per language.
-- [ ] Add reciprocal cross-language pointers (the Rust crate currently has no
-      "check the TS side" note; the TS side already points at Rust).
+- [x] Source shared constants. Decision: keep the ~4 semantic constants
+      (`SUPPORTED_SCHEMA_VERSIONS`, `MAX_PROMPT_CHARS`, `VALID_DIGITS`)
+      per-language with reciprocal twin pointers rather than add a shared
+      codegen step for so few values. Component **defaults** are already
+      single-sourced — they live in the schema, so typify reads them for Rust.
+- [x] Add reciprocal cross-language pointers. Each side's constants name their
+      twin (`model.ts` ↔ `validate.rs`/`lib.rs`); the Rust modules' headers
+      already point back at the TS files. Fixed stale `model.rs` references in
+      `model.ts` (the Rust helpers live in `model_ext.rs`).
 
 ---
 
