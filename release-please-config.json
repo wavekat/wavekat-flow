@@ -7,8 +7,7 @@
     "packages/flow-schema": {
       "release-type": "node",
       "package-name": "@wavekat/flow-schema",
-      "component": "flow-schema",
-      "release-as": "0.0.1"
+      "component": "flow-schema"
     }
   }
 }
