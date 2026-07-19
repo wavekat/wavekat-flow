@@ -1,0 +1,5 @@
+{
+  "description": "A -> B -> A with no terminal anywhere: every reachable node traps the caller. Exercises the backward-fixpoint trap check.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["trapped"] }
+}

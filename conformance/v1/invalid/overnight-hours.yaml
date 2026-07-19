@@ -1,0 +1,14 @@
+schema_version: 1
+id: flow_overnight
+name: Overnight range rejected
+entry: h
+nodes:
+  h:
+    kind: hours
+    timezone: America/New_York
+    schedule:
+      fri: [{ open: "22:00", close: "02:00" }]
+    exits: { open: bye, closed: bye }
+  bye:
+    kind: hangup
+    prompt: Bye.

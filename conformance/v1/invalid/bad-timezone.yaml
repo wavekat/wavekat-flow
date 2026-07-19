@@ -1,0 +1,13 @@
+schema_version: 1
+id: flow_badtz
+name: Unknown timezone
+entry: h
+nodes:
+  h:
+    kind: hours
+    timezone: Mars/Base
+    schedule: {}
+    exits: { open: bye, closed: bye }
+  bye:
+    kind: hangup
+    prompt: Bye.

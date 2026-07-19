@@ -13,8 +13,14 @@ description = "Declarative call-flow (\"Receptionist\") document model for the W
 publish = false
 
 [dependencies]
+anyhow = "1"
+async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_yaml_ng = "0.10"
+thiserror = "2"
+time = { version = "0.3", features = ["macros", "parsing"] }
+time-tz = "2"
 
 [build-dependencies]
 typify = "0.4"
@@ -24,6 +30,5 @@ prettyplease = "0.2"
 syn = "2"
 
 [dev-dependencies]
-serde_yaml_ng = "0.10"
 jsonschema = "0.29"
-serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt"] }

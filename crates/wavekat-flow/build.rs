@@ -22,6 +22,20 @@ fn main() {
 
     // draft 2020-12 -> the shape typify's schema reader expects.
     rewrite_defs(&mut value);
+    // Make typify emit `Node` as an internally-tagged enum instead of an
+    // `#[serde(untagged)]` one that mis-discriminates (a menu would
+    // deserialize as a greeting). Two things are needed, both Rust-only —
+    // the schema file itself keeps its clean `$defs` + `const` for TS's
+    // json-schema-to-typescript and the ajv/jsonschema validators:
+    //   1. typify's tagged-enum detection only inspects INLINE object
+    //      subschemas (its `get_object` returns None for a bare `$ref`), so
+    //      inline the per-node definitions into `Node`'s `oneOf`.
+    //   2. detection keys off a single-valued `enum` discriminant, not a
+    //      `const`, so rewrite each inlined branch's `kind` accordingly.
+    // Scoped to the node `kind` on purpose: a blanket const->enum rewrite
+    // would also turn the top-level `schema_version: { const: 1 }` into a
+    // constrained newtype, which the validator wants to stay a plain integer.
+    inline_node_variants(&mut value);
 
     let schema: schemars::schema::RootSchema =
         serde_json::from_value(value).expect("schema into RootSchema");
@@ -37,6 +51,75 @@ fn main() {
 
     let out = Path::new(&env::var("OUT_DIR").unwrap()).join("flow_types.rs");
     fs::write(out, formatted).expect("write generated types");
+}
+
+/// Inline `definitions.Node.oneOf`'s `$ref` branches with the referenced
+/// definition bodies, then drop those now-unused definitions. Runs after the
+/// `$defs` rewrite, so refs are `#/definitions/<Name>`.
+fn inline_node_variants(v: &mut serde_json::Value) {
+    let Some(defs) = v.get("definitions").and_then(|d| d.as_object()).cloned() else {
+        return;
+    };
+    let Some(one_of) = v
+        .get("definitions")
+        .and_then(|d| d.get("Node"))
+        .and_then(|n| n.get("oneOf"))
+        .and_then(|o| o.as_array())
+        .cloned()
+    else {
+        return;
+    };
+
+    let mut consumed: Vec<String> = Vec::new();
+    let mut inlined: Vec<serde_json::Value> = Vec::new();
+    for branch in &one_of {
+        match branch.get("$ref").and_then(|r| r.as_str()) {
+            Some(r) => {
+                let name = r
+                    .strip_prefix("#/definitions/")
+                    .expect("node variant ref shape");
+                let mut body = defs
+                    .get(name)
+                    .unwrap_or_else(|| panic!("missing node definition {name}"))
+                    .clone();
+                rewrite_kind_const_to_enum(&mut body);
+                consumed.push(name.to_string());
+                inlined.push(body);
+            }
+            // Already inline — leave as-is.
+            None => inlined.push(branch.clone()),
+        }
+    }
+
+    let defs_mut = v
+        .get_mut("definitions")
+        .and_then(|d| d.as_object_mut())
+        .expect("definitions object");
+    defs_mut
+        .get_mut("Node")
+        .and_then(|n| n.as_object_mut())
+        .expect("Node object")
+        .insert("oneOf".to_string(), serde_json::Value::Array(inlined));
+    for name in consumed {
+        defs_mut.remove(&name);
+    }
+}
+
+/// In a node definition body, rewrite `properties.kind: { "const": X }` into
+/// `{ "enum": [X] }` so typify's tagged-enum detection fires on `kind`.
+fn rewrite_kind_const_to_enum(body: &mut serde_json::Value) {
+    let Some(kind) = body
+        .get_mut("properties")
+        .and_then(|p| p.get_mut("kind"))
+        .and_then(|k| k.as_object_mut())
+    else {
+        return;
+    };
+    if !kind.contains_key("enum") {
+        if let Some(c) = kind.remove("const") {
+            kind.insert("enum".to_string(), serde_json::Value::Array(vec![c]));
+        }
+    }
 }
 
 /// Rename `$defs` -> `definitions` and rewrite `$ref` pointers, recursively.

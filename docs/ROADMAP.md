@@ -50,36 +50,62 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
       `mutate` suite waits on `mutate.ts` above.
 
 ### Rust — move from `wavekat-voice/crates/wavekat-flow/src`
-- [ ] `validate.rs` — the semantic twin of `validate.ts` (must agree via corpus).
-- [ ] `hours.rs` — timezone/date math (`time`, `time-tz` deps come along).
-- [ ] `engine.rs` — interpreter + the `FlowEffects` async trait **definition**
+- [x] `validate.rs` — the semantic twin of `validate.ts` (agrees via corpus);
+      `ValidationError::code()` maps to the shared code vocabulary
+      (`unknown_target`, matching the frozen corpus).
+- [x] `hours.rs` — timezone/date math (`time`, `time-tz` deps came along).
+      `validate_config` is piece-based (unchanged); `evaluate` takes `&Node`.
+- [x] `engine.rs` — interpreter + the `FlowEffects` async trait **definition**
       (the daemon keeps its `CallFlowEffects` *impl* in `wavekat-voice`).
-- [ ] `trace.rs` — Serialize-only run trace (output format, not document shape).
-- [ ] ⚠️ Reconcile the generated `Node` shape with the code. typify emits an
-      internally-tagged enum with `exits` per variant; the current crate uses
-      `Node { #[flatten] config: Component, exits }`. The wire format is
-      identical (proven by the corpus), but `validate.rs`/`engine.rs` reference
-      `node.config` / `Component::*` — adapt them to the generated names, or add
-      a thin hand-written façade over the generated enum.
-- [ ] Bring the `dev-dependency` on `tokio` for the engine's async scenario tests.
+      Matches on the generated `Node` directly; `goto`/menu use `node.exits()`.
+- [x] `trace.rs` — Serialize-only run trace (output format, not document
+      shape); `flow_version` is `u64` to match the generated `Flow`.
+- [x] ⚠️ Reconcile the generated `Node` shape. It was **worse** than the note
+      assumed: typify emitted an `#[serde(untagged)]` enum with `kind:
+      serde_json::Value`, which mis-discriminated (a `menu` deserialized as a
+      `greeting`, silently dropping `options`) — the corpus only checked "does
+      it deserialize at all", so it passed. Fixed in `build.rs` (Rust-only, no
+      schema / generated-type hand-edits): inline the per-node `oneOf` `$ref`s
+      and rewrite the `kind` `const`→single-value `enum`, so typify emits
+      `#[serde(tag = "kind")]` with `exits` per variant. Hand-written helpers
+      (`kind`, `is_terminal`, `required_exits`, `exits`, `Prompt::as_text`,
+      `Flow::from_yaml`) live in `src/model_ext.rs` — the Rust twin of
+      `model.ts` (logic, not shape).
+- [x] Bring the `dev-dependency` on `tokio` for the engine's async scenario
+      tests. (`anyhow` + `async-trait` also came along, as deps — the public
+      `FlowEffects` trait signature uses them.)
 
 ### Corpus — turn on the semantic half
-- [~] Wire the `semantic` field of each `*.expected.json` into **both** test
-      suites (today only `structurallyValid` is asserted). **TS done** (subset
-      match: `valid === semantic.ok` + every listed code reported, since a single
-      defect can cascade e.g. dangling→trapped); Rust pending (Phase 2 step 4).
-- [ ] Add regression cases for the reachability/trap/exit-exactness rules and the
-      hours edge cases (overnight rejected, DST, holiday exception override).
-- [ ] ⚠️ Encode the one deliberate divergence: unknown fields are a
+- [x] Wire the `semantic` field of each `*.expected.json` into **both** test
+      suites (was: only `structurallyValid`). Subset match on both sides:
+      acceptance matches (`valid === semantic.ok`) + every listed code reported,
+      since a single defect can cascade (e.g. dangling→trapped). Rust maps serde
+      parse failures to codes (`missing_field`, `unknown_kind`) alongside
+      `ValidationError::code()`.
+- [x] Add regression cases for the reachability/trap/exit-exactness rules and the
+      hours edge cases: `invalid/{unreachable,trapped,unexpected-exit,
+      overnight-hours,bad-timezone}` and `valid/hours-holiday` (holiday exception
+      override). Forced a cross-language fix: Rust wrapped all hours defects as
+      one `hours` code; now `ValidationError::Hours` delegates to
+      `HoursError::code()` so both languages report the specific code
+      (`non_positive_range`, `unknown_timezone`, …). (DST-specific corpus cases
+      still worth adding later; `hours.rs`'s DST math is unit-tested.)
+- [x] ⚠️ Encode the one deliberate divergence: unknown fields are a
       non-blocking `unknown_field` **warning** in TS and silently ignored by
-      Rust serde — both still *accept* the document. The corpus must treat these
-      as accepted, with the TS-only warning asserted separately.
+      Rust serde — both still *accept* the document. `valid/unknown-field` +
+      an optional `tsWarnings` field in `*.expected.json`, asserted by the TS
+      suite and ignored by Rust.
 
 ### Housekeeping
-- [ ] Source shared constants (`SUPPORTED_SCHEMA_VERSIONS`, `MAX_PROMPT_CHARS`,
-      `VALID_DIGITS`, defaults) from one place instead of re-declaring per language.
-- [ ] Add reciprocal cross-language pointers (the Rust crate currently has no
-      "check the TS side" note; the TS side already points at Rust).
+- [x] Source shared constants. Decision: keep the ~4 semantic constants
+      (`SUPPORTED_SCHEMA_VERSIONS`, `MAX_PROMPT_CHARS`, `VALID_DIGITS`)
+      per-language with reciprocal twin pointers rather than add a shared
+      codegen step for so few values. Component **defaults** are already
+      single-sourced — they live in the schema, so typify reads them for Rust.
+- [x] Add reciprocal cross-language pointers. Each side's constants name their
+      twin (`model.ts` ↔ `validate.rs`/`lib.rs`); the Rust modules' headers
+      already point back at the TS files. Fixed stale `model.rs` references in
+      `model.ts` (the Rust helpers live in `model_ext.rs`).
 
 ---
 

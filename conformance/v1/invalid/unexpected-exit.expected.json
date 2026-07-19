@@ -1,0 +1,5 @@
+{
+  "description": "A hangup (terminal) wires an exit it does not define. Exit-set exactness: no stray exit the engine would never follow.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["unexpected_exits"] }
+}
