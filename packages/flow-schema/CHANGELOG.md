@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.5](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.4...flow-schema-v0.0.5) (2026-07-19)
+
+
+### Bug Fixes
+
+* name Prompt variants via schema titles ([#28](https://github.com/wavekat/wavekat-flow/issues/28)) ([4318260](https://github.com/wavekat/wavekat-flow/commit/4318260faebffad8460503f4789951002dcd4863))
+
 ## [0.0.4](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.3...flow-schema-v0.0.4) (2026-07-19)
 
 
