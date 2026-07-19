@@ -52,13 +52,15 @@ roadmap.
 
 ## Release posture
 
-Both packages are publish-*shaped* (real `dist/` build, self-contained crate,
-`cargo package` verified in CI) but **unpublished**, versioned `0.0.x`. Do not
-`npm publish` / `cargo publish` manually — releases are cut by the automation:
-`release-please` (TS, tags `flow-schema-vX.Y.Z`) and `release-plz` (Rust, tags
-`wavekat-flow-vX.Y.Z`) maintain release PRs; the publish jobs are gated on the
-`RELEASE_ENABLED` repo variable + registry-token secrets, all unset until the
-repo goes public. Do not set `RELEASE_ENABLED` or add those secrets yourself.
+Both packages are **published** (`@wavekat/flow-schema` on npm, `wavekat-flow`
+on crates.io) and stay `0.0.x` until the consumer repos have adopted them. Do
+not `npm publish` / `cargo publish` manually — releases are cut by the
+automation: `release-please` (TS, tags `flow-schema-vX.Y.Z`) and `release-plz`
+(Rust, tags `wavekat-flow-vX.Y.Z`) maintain release PRs; merging a release PR
+publishes. Publish jobs are gated on the `RELEASE_ENABLED` repo variable
+(set). npm auth is trusted publishing (OIDC — no token; the npm package trusts
+`release-please.yml` in this repo, so renaming that file breaks publishing);
+crates.io auth is the org-level `CARGO_REGISTRY_TOKEN` secret.
 
 ## Conventions
 

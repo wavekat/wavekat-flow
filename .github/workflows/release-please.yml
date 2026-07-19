@@ -5,9 +5,11 @@ name: Release-please
 # commits. Merging the PR cuts a `flow-schema-vX.Y.Z` tag + GitHub release,
 # which triggers the npm publish job below.
 #
-# Publishing is gated on the RELEASE_ENABLED repository variable (plus the
-# NPM_TOKEN secret) so nothing can reach the registry while the repo is
-# private — flipping the repo public is: set the variable, add the token.
+# Publishing is gated on the RELEASE_ENABLED repository variable. npm auth
+# uses trusted publishing (OIDC): the package's npm settings trust this repo
+# + this workflow file, so no registry token is stored anywhere. Renaming
+# this file breaks publishing until the npm trusted-publisher config is
+# updated to match.
 # The Rust twin lives in release-plz.yml (tags `wavekat-flow-vX.Y.Z`).
 
 on:
@@ -37,6 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # npm trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,9 +47,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
-      # prepublishOnly runs typecheck + test + build before the tarball is cut.
-      - run: pnpm --filter @wavekat/flow-schema publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # npm (not pnpm) publish: the OIDC token exchange is only implemented
+      # in the npm CLI. prepublishOnly runs typecheck + test + build first.
+      - run: npm publish
+        working-directory: packages/flow-schema
