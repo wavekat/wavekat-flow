@@ -3,11 +3,17 @@
   "include-component-in-tag": true,
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
+  "plugins": ["cargo-workspace"],
   "packages": {
     "packages/flow-schema": {
       "release-type": "node",
       "package-name": "@wavekat/flow-schema",
       "component": "flow-schema"
+    },
+    "crates/wavekat-flow": {
+      "release-type": "rust",
+      "package-name": "wavekat-flow",
+      "component": "wavekat-flow"
     }
   }
 }
