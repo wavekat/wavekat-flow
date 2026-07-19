@@ -7,10 +7,11 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Declarative call-flow (\"Receptionist\") document model for the WaveKat voice platform. Types are generated from the normative JSON Schema (schema/flow.v1.schema.json), the single source of truth shared with the @wavekat/flow-schema npm package."
-# Kept private until the repo goes public (see README "Roadmap" phase 3),
-# then flipped to publish the crate to crates.io. Guard against a stray
-# `cargo publish` until then.
-publish = false
+keywords = ["ivr", "call-flow", "voice", "telephony"]
+categories = ["data-structures", "parser-implementations"]
+# The conformance suite reads ../../conformance, which only exists in the
+# repo checkout — don't ship a test that can't run from the packaged crate.
+exclude = ["tests/"]
 
 [dependencies]
 anyhow = "1"

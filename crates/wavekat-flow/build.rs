@@ -13,11 +13,27 @@
 use std::{env, fs, path::Path};
 
 fn main() {
-    let schema_path = Path::new("../../schema/flow.v1.schema.json");
+    // In the workspace, read the normative schema at the repo root and keep
+    // the crate-local copy in sync (it is committed so the published crate
+    // is self-contained — `cargo package` only ships files under the crate
+    // root; CI fails if the copy is stale). In a packaged crate the root
+    // schema doesn't exist, so build from the shipped copy.
+    let workspace_schema = Path::new("../../schema/flow.v1.schema.json");
+    let local_schema = Path::new("schema/flow.v1.schema.json");
     println!("cargo:rerun-if-changed=../../schema/flow.v1.schema.json");
+    println!("cargo:rerun-if-changed=schema/flow.v1.schema.json");
     println!("cargo:rerun-if-changed=build.rs");
 
-    let raw = fs::read_to_string(schema_path).expect("read schema");
+    let raw = if workspace_schema.exists() {
+        let raw = fs::read_to_string(workspace_schema).expect("read schema");
+        if fs::read_to_string(local_schema).ok().as_deref() != Some(raw.as_str()) {
+            fs::create_dir_all("schema").expect("create crate-local schema dir");
+            fs::write(local_schema, &raw).expect("sync crate-local schema copy");
+        }
+        raw
+    } else {
+        fs::read_to_string(local_schema).expect("read crate-local schema copy")
+    };
     let mut value: serde_json::Value = serde_json::from_str(&raw).expect("parse schema json");
 
     // draft 2020-12 -> the shape typify's schema reader expects.

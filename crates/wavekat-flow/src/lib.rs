@@ -39,8 +39,9 @@ pub use model_ext::NodeId;
 
 /// The normative JSON Schema (draft 2020-12) as a string, bundled so
 /// consumers can run structural validation without reaching outside the
-/// crate.
-pub const FLOW_V1_SCHEMA: &str = include_str!("../../../schema/flow.v1.schema.json");
+/// crate. The crate-local copy is synced from the repo-root schema by
+/// `build.rs` (and is what ships in the published package).
+pub const FLOW_V1_SCHEMA: &str = include_str!("../schema/flow.v1.schema.json");
 
 /// Schema versions this crate's model describes. Twin:
 /// `packages/flow-schema/src/model.ts` `SUPPORTED_SCHEMA_VERSIONS`.

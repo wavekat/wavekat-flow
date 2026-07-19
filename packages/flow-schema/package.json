@@ -1,23 +1,37 @@
 {
   "name": "@wavekat/flow-schema",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "TypeScript model, JSON Schema, and structural validator for the WaveKat call-flow (\"Receptionist\") format. Types are generated from the normative schema at ../../schema/flow.v1.schema.json.",
-  "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wavekat/wavekat-flow.git",
+    "directory": "packages/flow-schema"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema/v1": "./src/generated/flow.v1.schema.json"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema/v1": "./dist/generated/flow.v1.schema.json"
   },
   "files": [
-    "src"
+    "dist"
   ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "gen": "node scripts/generate.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/generated/flow.v1.schema.json dist/generated/flow.v1.schema.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "dependencies": {
     "ajv": "^8.17.1",

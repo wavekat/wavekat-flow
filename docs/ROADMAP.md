@@ -114,22 +114,42 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
 Trigger: the format is stable enough and the repo is ready to be public.
 
 ### Make the packages publishable
-- [ ] TS: add a real build (emit `dist/` with `.d.ts`, drop `noEmit`), point
-      `main`/`module`/`types` at `dist/`, add `exports` + `files`, remove
-      `"private": true`, set `publishConfig.access: "public"`, add
-      `prepublishOnly`. (Today `main` points at `src/index.ts` for workspace use.)
-- [ ] Rust: flip `publish = false` → publishable; inline the
-      workspace-inherited manifest fields as needed; choose real semver pins for
-      deps currently `*`.
-- [ ] Decide package/crate semver vs `schema_version`: version the artifacts on
-      their own semver; advertise supported doc versions via
-      `SUPPORTED_SCHEMA_VERSIONS`.
+- [x] TS: real build via `tsconfig.build.json` (ESM + `.d.ts` + maps into
+      `dist/`, schema JSON copied in), `main`/`module`/`types`/`exports` point
+      at `dist/`, `files: ["dist"]`, `private` dropped, `publishConfig.access:
+      "public"`, `prepublishOnly` (typecheck + test + build), `repository` +
+      bundled `LICENSE`. Workspace dev flow unchanged (tests import `src/`).
+- [x] Rust: `publish = false` dropped; `cargo package` verify passes. The
+      catch was self-containment, not manifest fields: `build.rs` and
+      `FLOW_V1_SCHEMA`'s `include_str!` read `../../schema/…`, which doesn't
+      exist in a packaged crate. Now a committed crate-local
+      `schema/flow.v1.schema.json` copy ships in the package; `build.rs` syncs
+      it from the root schema in workspace builds (CI fails on a stale copy)
+      and builds from it when packaged. `tests/` excluded from the package
+      (the conformance suite needs the repo checkout). Keywords/categories
+      added; no `*` dep pins existed anymore. CI now runs the TS `build` and
+      `cargo package` so neither artifact can regress.
+- [x] Package/crate semver vs `schema_version`: independent semver; supported
+      doc versions advertised via `SUPPORTED_SCHEMA_VERSIONS` (see README
+      "Versioning"). Both artifacts sit at `0.0.1` and stay `0.0.x` until the
+      consumer repos have adopted the published packages.
 
 ### Release automation (match house style)
-- [ ] Rust: `release-plz` (as in `wavekat-platform-client`).
-- [ ] TS: `release-please`.
-- [ ] Add the publish workflows (npm + crates.io tokens) — currently omitted so
-      nothing can publish before this phase.
+- [x] Rust: `release-plz` (workflow shape from `wavekat-platform-client`, on
+      hosted runners like the rest of this repo's CI). Tags
+      `wavekat-flow-vX.Y.Z` (crate-name prefix so the two tag streams in this
+      repo can't collide).
+- [x] TS: `release-please` (manifest mode, as in `wavekat-brand`/`wavekat-lab`).
+      Component `flow-schema`, tags `flow-schema-vX.Y.Z`; pre-major bump
+      config keeps `feat:`/`fix:` on `0.0.x` patch bumps. Manifest starts at
+      `0.0.0` so the first cut release is the as-yet-unpublished `0.0.1`.
+- [x] Publish workflows exist but are **dead switches**: both publish jobs are
+      gated on the `RELEASE_ENABLED` repository variable (unset) and need the
+      `NPM_TOKEN` / `CARGO_REGISTRY_TOKEN` secrets (unset), so nothing can
+      reach a registry while the repo is private. Go-public flip = set the
+      variable + add the two tokens (see "Flip public" below). Note: the
+      `wavekat-flow` crates.io name and `@wavekat/flow-schema` npm scope are
+      claimed only at first publish.
 - [ ] Add README badges (crates.io + docs.rs, and an npm badge for the TS
       package) once published — omitted now because they would 404 for an
       unpublished, private repo. Match the banner+badges header of the sibling

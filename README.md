@@ -62,6 +62,9 @@ language and **pinned by the shared corpus**, not generated. See
   `schema_version` (they track implementation releases). A given package
   release advertises which `schema_version`s it understands via
   `SUPPORTED_SCHEMA_VERSIONS`.
+- Both artifacts stay on `0.0.x` while the format settles: every release may
+  break API, and nothing is promised beyond "the corpus is green". They move
+  past `0.0.x` once the consumer repos have adopted the published packages.
 
 ## Roadmap
 
