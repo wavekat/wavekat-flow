@@ -22,6 +22,10 @@ type Expectation = {
   description: string;
   structurallyValid: boolean;
   semantic: { ok: boolean; errors: string[] };
+  /** TS-only, optional: non-blocking warning codes this case must surface —
+   * the deliberate cross-language divergence (unknown fields warn in TS,
+   * are silently ignored by Rust serde; both still accept the document). */
+  tsWarnings?: string[];
 };
 
 function casesIn(bucket: 'valid' | 'invalid'): string[] {
@@ -76,6 +80,13 @@ describe('conformance corpus v1 — semantic (checkFlow)', () => {
           expect(reported, `expected semantic error "${code}" for ${bucket}/${name}`).toContain(
             code,
           );
+        }
+        // The TS-only divergence: non-blocking warnings the case must surface.
+        const warnings = new Set(
+          result.issues.filter((issue) => issue.severity === 'warning').map((issue) => issue.code),
+        );
+        for (const code of expected.tsWarnings ?? []) {
+          expect(warnings, `expected TS warning "${code}" for ${bucket}/${name}`).toContain(code);
         }
       });
     }

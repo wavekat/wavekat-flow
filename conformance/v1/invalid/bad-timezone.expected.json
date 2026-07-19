@@ -1,0 +1,5 @@
+{
+  "description": "An hours node names an IANA zone that does not resolve. Structurally a plain string (valid); the semantic validator rejects with unknown_timezone.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["unknown_timezone"] }
+}

@@ -1,0 +1,5 @@
+{
+  "description": "An hours range whose close is not after its open (overnight). Overnight windows are not a v1 feature; both validators reject with non_positive_range.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["non_positive_range"] }
+}

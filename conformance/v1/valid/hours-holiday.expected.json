@@ -1,0 +1,5 @@
+{
+  "description": "A valid hours node with a weekly schedule and a closed-all-day holiday exception, branching open->ring, closed->voicemail. Exercises exception parsing + validation on both sides.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

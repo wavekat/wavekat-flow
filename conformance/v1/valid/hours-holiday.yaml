@@ -1,0 +1,22 @@
+schema_version: 1
+id: flow_holiday
+name: Hours with a holiday exception
+entry: check
+nodes:
+  check:
+    kind: hours
+    timezone: America/New_York
+    schedule:
+      mon: [{ open: "09:00", close: "17:00" }]
+      tue: [{ open: "09:00", close: "17:00" }]
+    exceptions:
+      - date: 2026-12-25
+        closed: true
+    exits: { open: desk, closed: vm }
+  desk:
+    kind: ring
+    timeout_secs: 20
+    exits: { no_answer: vm }
+  vm:
+    kind: message
+    prompt: Please leave a message after the tone.

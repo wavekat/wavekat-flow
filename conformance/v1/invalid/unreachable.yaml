@@ -1,0 +1,11 @@
+schema_version: 1
+id: flow_unreach
+name: Unreachable orphan
+entry: hello
+nodes:
+  hello:
+    kind: hangup
+    prompt: Bye.
+  orphan:
+    kind: hangup
+    prompt: Nobody gets here.

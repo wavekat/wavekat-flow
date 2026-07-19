@@ -24,7 +24,8 @@ Every `<case>.yaml` has a sibling `<case>.expected.json`:
 {
   "description": "human note on what the case exercises",
   "structurallyValid": true,
-  "semantic": { "ok": true, "errors": ["error_code", "..."] }
+  "semantic": { "ok": true, "errors": ["error_code", "..."] },
+  "tsWarnings": ["unknown_field"]
 }
 ```
 
@@ -33,11 +34,20 @@ Every `<case>.yaml` has a sibling `<case>.expected.json`:
   `jsonschema` (`crates/wavekat-flow`). Because both use a real draft-2020-12
   validator over the *same* schema, this verdict is identical across languages.
 - **`semantic`** — the expected result of the full semantic validator
-  (reachability, exit wiring, hours, …). Wired into both test suites in Phase 2,
-  when the validators move into this repo. `errors` lists the expected error
-  codes. A document can be `structurallyValid: true` but `semantic.ok: false`
-  (see `invalid/dangling-exit`), which is exactly the class of bug a JSON Schema
-  cannot catch.
+  (reachability, exit wiring, hours, …), wired into **both** test suites. `ok`
+  is the acceptance verdict; `errors` lists the *characteristic* error codes.
+  The match is a **subset**, not exact-set: `accepted === semantic.ok` and every
+  listed code is reported, because one defect can cascade (a dangling exit also
+  traps the caller) and the frozen corpus should not have to enumerate incidental
+  cascade codes. A document can be `structurallyValid: true` but
+  `semantic.ok: false` (see `invalid/dangling-exit`), which is exactly the class
+  of bug a JSON Schema cannot catch.
+- **`tsWarnings`** (optional, TS-only) — non-blocking warning codes the
+  TypeScript parser must surface. This encodes the one deliberate cross-language
+  divergence: an unknown field is a `unknown_field` **warning** in TS but is
+  silently ignored by Rust serde — both still *accept* the document
+  (`semantic.ok: true`). The Rust suite ignores this field. See
+  `valid/unknown-field`.
 
 ## The backward-compatibility rule
 

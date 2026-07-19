@@ -1,0 +1,6 @@
+{
+  "description": "Unknown fields (top-level `color`, node-level `volume`) are ACCEPTED by both languages: the schema permits them, Rust serde ignores them, and the TS parser flags them as non-blocking `unknown_field` WARNINGS (asserted via tsWarnings, TS-only). This is the one deliberate cross-language divergence.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] },
+  "tsWarnings": ["unknown_field"]
+}
