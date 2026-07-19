@@ -135,10 +135,21 @@ Trigger: the format is stable enough and the repo is ready to be public.
       consumer repos have adopted the published packages.
 
 ### Release automation (match house style)
-- [ ] Rust: `release-plz` (as in `wavekat-platform-client`).
-- [ ] TS: `release-please`.
-- [ ] Add the publish workflows (npm + crates.io tokens) — currently omitted so
-      nothing can publish before this phase.
+- [x] Rust: `release-plz` (workflow shape from `wavekat-platform-client`, on
+      hosted runners like the rest of this repo's CI). Tags
+      `wavekat-flow-vX.Y.Z` (crate-name prefix so the two tag streams in this
+      repo can't collide).
+- [x] TS: `release-please` (manifest mode, as in `wavekat-brand`/`wavekat-lab`).
+      Component `flow-schema`, tags `flow-schema-vX.Y.Z`; pre-major bump
+      config keeps `feat:`/`fix:` on `0.0.x` patch bumps. Manifest starts at
+      `0.0.0` so the first cut release is the as-yet-unpublished `0.0.1`.
+- [x] Publish workflows exist but are **dead switches**: both publish jobs are
+      gated on the `RELEASE_ENABLED` repository variable (unset) and need the
+      `NPM_TOKEN` / `CARGO_REGISTRY_TOKEN` secrets (unset), so nothing can
+      reach a registry while the repo is private. Go-public flip = set the
+      variable + add the two tokens (see "Flip public" below). Note: the
+      `wavekat-flow` crates.io name and `@wavekat/flow-schema` npm scope are
+      claimed only at first publish.
 - [ ] Add README badges (crates.io + docs.rs, and an npm badge for the TS
       package) once published — omitted now because they would 404 for an
       unpublished, private repo. Match the banner+badges header of the sibling

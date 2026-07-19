@@ -53,10 +53,12 @@ roadmap.
 ## Release posture
 
 Both packages are publish-*shaped* (real `dist/` build, self-contained crate,
-`cargo package` verified in CI) but **unpublished**, versioned `0.0.x`. They go
-to the public registries only when the repo itself goes public (Phase 3, via
-the release automation — not by hand). Do not `npm publish` / `cargo publish`
-manually.
+`cargo package` verified in CI) but **unpublished**, versioned `0.0.x`. Do not
+`npm publish` / `cargo publish` manually — releases are cut by the automation:
+`release-please` (TS, tags `flow-schema-vX.Y.Z`) and `release-plz` (Rust, tags
+`wavekat-flow-vX.Y.Z`) maintain release PRs; the publish jobs are gated on the
+`RELEASE_ENABLED` repo variable + registry-token secrets, all unset until the
+repo goes public. Do not set `RELEASE_ENABLED` or add those secrets yourself.
 
 ## Conventions
 
