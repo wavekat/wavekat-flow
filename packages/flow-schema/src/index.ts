@@ -11,12 +11,15 @@
 // in-repo copy so the Phase 3 swap is a dependency change, not a code
 // change.
 
-import { Ajv2020 } from 'ajv/dist/2020.js';
-import type { ErrorObject } from 'ajv';
-
 // The schema as a generated TS module, not a JSON import: import
 // attributes (`with { type: 'json' }`) don't survive every consumer
 // bundler. The raw JSON is still shipped at the `./schema/v1` export.
+//
+// Note: Ajv-based structural validation (`validateStructure`) deliberately
+// does NOT live here — it compiles a schema via runtime code generation,
+// which crashes code-gen-disallowed runtimes (Cloudflare Workers) at
+// import time. It lives behind the `@wavekat/flow-schema/structure`
+// subpath so this barrel stays Ajv-free and safe to bundle on the edge.
 import schema from './generated/schema.js';
 
 // Model: generated types + hand-written constants & helpers.
@@ -50,20 +53,3 @@ export {
   setNodeValue,
   stampIdentity,
 } from './mutate.js';
-
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-const validateFn = ajv.compile(schema);
-
-export type StructuralResult =
-  | { valid: true }
-  | { valid: false; errors: ErrorObject[] };
-
-/**
- * Validate an already-parsed document against the normative JSON Schema
- * (structure only — no reachability / exit-wiring / hours semantics; use
- * `checkFlow` / `validateFlow` for those).
- */
-export function validateStructure(doc: unknown): StructuralResult {
-  const valid = validateFn(doc);
-  return valid ? { valid: true } : { valid: false, errors: validateFn.errors ?? [] };
-}
