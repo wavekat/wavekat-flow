@@ -4,6 +4,10 @@
   </a>
 </p>
 
+[![npm](https://img.shields.io/npm/v/%40wavekat%2Fflow-schema.svg)](https://www.npmjs.com/package/@wavekat/flow-schema)
+[![Crates.io](https://img.shields.io/crates/v/wavekat-flow.svg)](https://crates.io/crates/wavekat-flow)
+[![docs.rs](https://docs.rs/wavekat-flow/badge.svg)](https://docs.rs/wavekat-flow)
+
 Single source of truth for the [WaveKat](https://wavekat.com) call-flow
 ("Receptionist") document format.
 
