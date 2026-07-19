@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.3...flow-schema-v0.0.4) (2026-07-19)
+
+
+### Bug Fixes
+
+* keep ajv codegen out of flow-schema barrel ([#26](https://github.com/wavekat/wavekat-flow/issues/26)) ([be38c3e](https://github.com/wavekat/wavekat-flow/commit/be38c3e9534f12d38d66a70106c3025091c2796d))
+
 ## [0.0.3](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.2...flow-schema-v0.0.3) (2026-07-19)
 
 
