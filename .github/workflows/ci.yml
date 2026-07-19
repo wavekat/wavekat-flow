@@ -29,6 +29,8 @@ jobs:
           fi
       - run: pnpm --filter @wavekat/flow-schema typecheck
       - run: pnpm --filter @wavekat/flow-schema test
+      - name: Build the publishable artifact (dist/)
+        run: pnpm --filter @wavekat/flow-schema build
 
   rust:
     runs-on: ubuntu-latest
@@ -42,6 +44,14 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - name: Test (types regenerate from the schema on build)
         run: cargo test -p wavekat-flow
+      - name: Fail on stale crate-local schema copy (synced by build.rs)
+        run: |
+          if ! git diff --exit-code -- crates/wavekat-flow/schema; then
+            echo "::error::crate-local schema copy is stale — run 'cargo build -p wavekat-flow' and commit"
+            exit 1
+          fi
+      - name: Verify the crate builds from its own package tarball
+        run: cargo package -p wavekat-flow
 
   msrv:
     runs-on: ubuntu-latest

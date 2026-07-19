@@ -114,16 +114,25 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
 Trigger: the format is stable enough and the repo is ready to be public.
 
 ### Make the packages publishable
-- [ ] TS: add a real build (emit `dist/` with `.d.ts`, drop `noEmit`), point
-      `main`/`module`/`types` at `dist/`, add `exports` + `files`, remove
-      `"private": true`, set `publishConfig.access: "public"`, add
-      `prepublishOnly`. (Today `main` points at `src/index.ts` for workspace use.)
-- [ ] Rust: flip `publish = false` → publishable; inline the
-      workspace-inherited manifest fields as needed; choose real semver pins for
-      deps currently `*`.
-- [ ] Decide package/crate semver vs `schema_version`: version the artifacts on
-      their own semver; advertise supported doc versions via
-      `SUPPORTED_SCHEMA_VERSIONS`.
+- [x] TS: real build via `tsconfig.build.json` (ESM + `.d.ts` + maps into
+      `dist/`, schema JSON copied in), `main`/`module`/`types`/`exports` point
+      at `dist/`, `files: ["dist"]`, `private` dropped, `publishConfig.access:
+      "public"`, `prepublishOnly` (typecheck + test + build), `repository` +
+      bundled `LICENSE`. Workspace dev flow unchanged (tests import `src/`).
+- [x] Rust: `publish = false` dropped; `cargo package` verify passes. The
+      catch was self-containment, not manifest fields: `build.rs` and
+      `FLOW_V1_SCHEMA`'s `include_str!` read `../../schema/…`, which doesn't
+      exist in a packaged crate. Now a committed crate-local
+      `schema/flow.v1.schema.json` copy ships in the package; `build.rs` syncs
+      it from the root schema in workspace builds (CI fails on a stale copy)
+      and builds from it when packaged. `tests/` excluded from the package
+      (the conformance suite needs the repo checkout). Keywords/categories
+      added; no `*` dep pins existed anymore. CI now runs the TS `build` and
+      `cargo package` so neither artifact can regress.
+- [x] Package/crate semver vs `schema_version`: independent semver; supported
+      doc versions advertised via `SUPPORTED_SCHEMA_VERSIONS` (see README
+      "Versioning"). Both artifacts sit at `0.0.1` and stay `0.0.x` until the
+      consumer repos have adopted the published packages.
 
 ### Release automation (match house style)
 - [ ] Rust: `release-plz` (as in `wavekat-platform-client`).

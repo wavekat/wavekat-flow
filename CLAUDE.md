@@ -18,8 +18,11 @@ roadmap.
 - **The schema is authoritative.** Never hand-edit generated model types.
   Change `schema/flow.v1.schema.json`, then regenerate:
   - TS: `pnpm --filter @wavekat/flow-schema gen` (commit `src/generated/*`).
-  - Rust: nothing to commit — `build.rs` regenerates from the schema every
-    build, so the crate can't drift.
+  - Rust: no generated types to commit — `build.rs` regenerates from the
+    schema every build, so the crate can't drift. It also syncs the committed
+    crate-local copy `crates/wavekat-flow/schema/flow.v1.schema.json` (shipped
+    so the packaged crate is self-contained); commit that too — CI fails if
+    it's stale. Never edit the copy by hand.
 - **The corpus is frozen.** A case in `conformance/vN/` is a permanent
   contract. You may add cases; you may not silently change a case's expected
   outcome to make a build pass. Incompatible format changes get a new
@@ -49,9 +52,11 @@ roadmap.
 
 ## Release posture
 
-Both packages are currently `private` / `publish = false`. They flip to public
-registries only in Phase 3, when the repo itself goes public. Do not `npm
-publish` / `cargo publish` before then.
+Both packages are publish-*shaped* (real `dist/` build, self-contained crate,
+`cargo package` verified in CI) but **unpublished**, versioned `0.0.x`. They go
+to the public registries only when the repo itself goes public (Phase 3, via
+the release automation — not by hand). Do not `npm publish` / `cargo publish`
+manually.
 
 ## Conventions
 
