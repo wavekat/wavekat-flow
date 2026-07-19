@@ -43,7 +43,7 @@ roadmap.
 
 ## Toolchain
 
-- Node 22 + pnpm (workspace). Rust stable (edition 2021, MSRV 1.75).
+- Node 22 + pnpm (workspace). Rust stable (edition 2021, MSRV 1.88).
 - TS codegen: `json-schema-to-typescript`. Rust codegen: `typify` (build dep).
 - Structural validation: `ajv` (TS) / `jsonschema` (Rust) — both draft 2020-12.
 
