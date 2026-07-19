@@ -14,7 +14,10 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject } from 'ajv';
 
-import schema from './generated/flow.v1.schema.json' with { type: 'json' };
+// The schema as a generated TS module, not a JSON import: import
+// attributes (`with { type: 'json' }`) don't survive every consumer
+// bundler. The raw JSON is still shipped at the `./schema/v1` export.
+import schema from './generated/schema.js';
 
 // Model: generated types + hand-written constants & helpers.
 export * from './model.js';
