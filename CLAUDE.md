@@ -8,10 +8,9 @@ document format. The normative JSON Schema lives in `schema/`; the
 **generate their model types from it**; the `conformance/` corpus is run by
 both languages to guarantee they agree.
 
-It replaces the previous arrangement where `wavekat-platform` (TS) and
-`wavekat-voice` (Rust) each hand-maintained a twin of the model + validator
-with no shared tests. See `README.md` for the full design and the phased
-roadmap.
+It replaces the previous arrangement where the platform (TS) and the voice
+daemon (Rust) each hand-maintained a twin of the model + validator with no
+shared tests. See `README.md` for the full design and the phased roadmap.
 
 ## Non-negotiables
 
@@ -66,6 +65,10 @@ crates.io auth is the org-level `CARGO_REGISTRY_TOKEN` secret.
 
 - Commits & PR titles: Conventional Commits (`feat:`, `fix:`, `docs:`, …),
   under 50 chars.
+- **No private repo names.** The consumer repos are private; this repo (and
+  its published packages) is public-facing. Refer to them generically — "the
+  platform" (TS) and "the voice daemon" (Rust) — never by repo name or GitHub
+  URL, anywhere: docs, code comments, commit messages.
 - License: Apache-2.0 (matches the other public WaveKat crates).
 - **Docs naming**: numbered `NN-name.md` (e.g. `48-ivr-call-flows.md`) for
   design docs / feature plans that progress over a lifecycle; `UPPERCASE.md`

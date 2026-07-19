@@ -13,7 +13,7 @@
 ## The format spec
 
 The prose specification of the call-flow format is **doc 48
-("IVR call flows")**, which currently lives in the `wavekat-voice` repo
+("IVR call flows")**, which currently lives in the voice daemon's repo
 (`docs/48-ivr-call-flows.md`). Its "Placement" section is the design basis for
 this repo.
 
@@ -22,6 +22,6 @@ model, version-negotiation policy). This repo holds the *normative* spec — the
 machine-checkable `schema/flow.v1.schema.json` and the `conformance/` corpus.
 
 **Planned (Phase 2/3):** migrate doc 48 into this repo so the narrative and
-normative specs live together, and leave a pointer behind in `wavekat-voice`.
-Until then, treat doc 48 in `wavekat-voice` as canonical for prose and the
-schema here as canonical for the exact shape.
+normative specs live together, and leave a pointer behind in the daemon's
+repo. Until then, treat doc 48 there as canonical for prose and the schema
+here as canonical for the exact shape.

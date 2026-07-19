@@ -18,8 +18,8 @@ to read and write it:
 
 | Consumer | Language | What it does with a flow |
 |---|---|---|
-| [`wavekat-platform`](https://github.com/wavekat/wavekat-platform) | TypeScript | authors, edits, validates, freezes on publish |
-| [`wavekat-voice`](https://github.com/wavekat/voice) | Rust | parses, validates, runs the flow on a live call |
+| The WaveKat platform | TypeScript | authors, edits, validates, freezes on publish |
+| The voice daemon | Rust | parses, validates, runs the flow on a live call |
 
 Historically each maintained a **hand-ported twin** of the model and validator,
 kept in sync by convention (`schema_version` negotiation + "check the other
@@ -88,13 +88,13 @@ The detailed, checkbox-level task list lives in
   shared corpus.
 - **Phase 3 — publish & adopt.** Flip the repo public, publish
   `@wavekat/flow-schema` to npm and `wavekat-flow` to crates.io, and switch
-  `wavekat-platform` / `wavekat-voice` from their in-repo copies to the
+  the platform and the voice daemon from their in-repo copies to the
   published artifacts.
 
-This extends [doc 48 "Placement"](https://github.com/wavekat/voice) (the
-`wavekat-voice` design doc), which had planned only to publish the JSON Schema
-and extract the Rust engine crate — it had not planned the shared codegen +
-conformance corpus this repo adds.
+This extends the "Placement" section of doc 48 (the original call-flow design
+doc), which had planned only to publish the JSON Schema and extract the Rust
+engine crate — it had not planned the shared codegen + conformance corpus this
+repo adds.
 
 ## Development
 

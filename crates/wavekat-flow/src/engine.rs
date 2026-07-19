@@ -16,7 +16,7 @@
 //! what makes a full call testable with no call.
 //!
 //! This crate owns the [`FlowEffects`] trait *definition*; the daemon keeps
-//! its live `CallFlowEffects` *impl* in `wavekat-voice`.
+//! its live `CallFlowEffects` *impl* in its own codebase.
 
 use std::time::Duration;
 

@@ -2,7 +2,7 @@
 // daemon enforces at load time must reject/accept the same documents
 // here, or the platform would publish flows a device then refuses.
 //
-// Migrated from wavekat-platform/packages/flow-schema/src/validate.test.ts.
+// Migrated from the platform repo's packages/flow-schema/src/validate.test.ts.
 // The dangling-target code is `unknown_target` (reconciled to the frozen
 // conformance corpus; see src/validate.ts).
 
