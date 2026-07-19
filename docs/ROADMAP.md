@@ -28,7 +28,7 @@ Goal: the validators, hours math, parser, mutator, and engine live here — one
 copy per language, adapted to the **generated** types, covered by the corpus.
 Nothing is migrated in the consumer repos yet (that's Phase 3).
 
-### TypeScript — move from `wavekat-platform/packages/flow-schema/src`
+### TypeScript — move from the platform repo's `packages/flow-schema/src`
 - [x] `parse.ts` — safe-subset YAML decode (anchors/aliases/tags/dup-keys/
       implicit-typing rejection, `nodeRanges` source offsets).
 - [x] `mutate.ts` — comment-preserving edits (stays TS-only; the daemon never
@@ -49,14 +49,14 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
 - [x] Port the existing `*.test.ts` suites (`parse`, `validate`, `refs`); the
       `mutate` suite waits on `mutate.ts` above.
 
-### Rust — move from `wavekat-voice/crates/wavekat-flow/src`
+### Rust — move from the voice daemon's `crates/wavekat-flow/src`
 - [x] `validate.rs` — the semantic twin of `validate.ts` (agrees via corpus);
       `ValidationError::code()` maps to the shared code vocabulary
       (`unknown_target`, matching the frozen corpus).
 - [x] `hours.rs` — timezone/date math (`time`, `time-tz` deps came along).
       `validate_config` is piece-based (unchanged); `evaluate` takes `&Node`.
 - [x] `engine.rs` — interpreter + the `FlowEffects` async trait **definition**
-      (the daemon keeps its `CallFlowEffects` *impl* in `wavekat-voice`).
+      (the daemon keeps its `CallFlowEffects` *impl* in its own repo).
       Matches on the generated `Node` directly; `goto`/menu use `node.exits()`.
 - [x] `trace.rs` — Serialize-only run trace (output format, not document
       shape); `flow_version` is `u64` to match the generated `Flow`.
@@ -157,12 +157,12 @@ Trigger: the format is stable enough and the repo is ready to be public.
 - [ ] Make the GitHub repo public.
 - [x] Publish `@wavekat/flow-schema` (npm) and `wavekat-flow` (crates.io) —
       both at `0.0.1`, 2026-07-19 (published ahead of the repo going public).
-- [ ] `wavekat-platform`: delete `packages/flow-schema`, depend on the published
+- [ ] Platform repo: delete `packages/flow-schema`, depend on the published
       npm package. Import paths are unchanged, so this is a dependency swap.
-- [ ] `wavekat-voice`: replace the `crates/wavekat-flow` path crate with the
+- [ ] Voice-daemon repo: replace the `crates/wavekat-flow` path crate with the
       registry dependency; bump.
-- [ ] Migrate doc 48 (`wavekat-voice/docs/48-ivr-call-flows.md`) into `docs/`
-      here; leave a pointer behind in `wavekat-voice`.
+- [ ] Migrate doc 48 (`docs/48-ivr-call-flows.md` in the voice-daemon repo)
+      into `docs/` here; leave a pointer behind.
 
 ---
 

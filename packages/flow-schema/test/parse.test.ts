@@ -3,7 +3,7 @@
 // keys are rejected, `ui` is preserved) plus the safe-subset and
 // strict-typing rules the TS side enforces at parse time.
 //
-// Migrated from wavekat-platform/packages/flow-schema/src/parse.test.ts.
+// Migrated from the platform repo's packages/flow-schema/src/parse.test.ts.
 
 import { describe, expect, it } from 'vitest';
 

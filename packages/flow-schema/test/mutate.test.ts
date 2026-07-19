@@ -4,7 +4,7 @@
 // that misses one exit target silently reroutes a caller; these tests
 // are the fence.
 //
-// Migrated from wavekat-platform/packages/flow-schema/src/mutate.test.ts.
+// Migrated from the platform repo's packages/flow-schema/src/mutate.test.ts.
 
 import { describe, expect, it } from 'vitest';
 

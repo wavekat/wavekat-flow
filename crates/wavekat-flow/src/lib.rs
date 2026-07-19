@@ -11,7 +11,7 @@
 //! [`trace`] output) alongside the generated model, adapted to the generated
 //! types and pinned by the shared conformance corpus. The engine owns the
 //! [`engine::FlowEffects`] trait *definition*; the daemon keeps its live impl
-//! in `wavekat-voice`. Comment-preserving mutation stays TS-only.
+//! in its own codebase. Comment-preserving mutation stays TS-only.
 
 /// The generated document model (`Flow`, `Node`, `Prompt`, …), emitted
 /// from the schema by `typify` into `OUT_DIR/flow_types.rs`.

@@ -2,7 +2,7 @@
 // (docs/16 §7). Moved here from apps/web so the API's freeze-on-publish and
 // missing-asset warnings resolve exactly the same refs the editor does.
 //
-// Migrated from wavekat-platform/packages/flow-schema/src/refs.test.ts.
+// Migrated from the platform repo's packages/flow-schema/src/refs.test.ts.
 
 import { describe, expect, it } from 'vitest';
 
