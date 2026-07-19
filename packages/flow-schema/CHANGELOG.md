@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.2](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.1...flow-schema-v0.0.2) (2026-07-19)
+
+
+### Bug Fixes
+
+* ship READMEs with published packages ([#18](https://github.com/wavekat/wavekat-flow/issues/18)) ([7001290](https://github.com/wavekat/wavekat-flow/commit/7001290e19d5fdf665835e72ecde4762f90815fe))
+
 ## 0.0.1 (2026-07-19)
 
 
