@@ -81,12 +81,11 @@ impl Node {
 
 impl Prompt {
     /// The spoken text, or `None` for an audio-asset prompt. Handy for
-    /// traces and length validation. typify names the untagged variants
-    /// `Variant0` (text) and `Variant1` (`{ audio }`).
+    /// traces and length validation.
     pub fn as_text(&self) -> Option<&str> {
         match self {
-            Prompt::Variant0(t) => Some(t.as_str()),
-            Prompt::Variant1 { .. } => None,
+            Prompt::Text(t) => Some(t.as_str()),
+            Prompt::Audio { .. } => None,
         }
     }
 }
