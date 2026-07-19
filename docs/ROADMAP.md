@@ -149,10 +149,9 @@ Trigger: the format is stable enough and the repo is ready to be public.
       publishing (OIDC, no stored token; the npm package trusts
       `release-please.yml` in this repo); crates.io auth is the org-level
       `CARGO_REGISTRY_TOKEN` secret.
-- [ ] Add README badges (crates.io + docs.rs, and an npm badge for the TS
-      package) once published — omitted now because they would 404 for an
-      unpublished, private repo. Match the banner+badges header of the sibling
-      crates (`wavekat-core`, `wavekat-turn`).
+- [x] Add README badges (npm + crates.io + docs.rs), matching the
+      banner+badges header of the sibling crates (`wavekat-core`,
+      `wavekat-turn`). All three resolve now that both packages are published.
 
 ### Flip public + migrate consumers
 - [ ] Make the GitHub repo public.
