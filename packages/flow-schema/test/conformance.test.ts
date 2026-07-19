@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import { validateStructure } from '../src/index.js';
+import { checkFlow, validateStructure } from '../src/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const corpusRoot = resolve(here, '..', '..', '..', 'conformance', 'v1');
@@ -31,22 +31,52 @@ function casesIn(bucket: 'valid' | 'invalid'): string[] {
     .map((f) => f.slice(0, -'.yaml'.length));
 }
 
-function load(bucket: string, name: string): { doc: unknown; expected: Expectation } {
-  const dir = resolve(corpusRoot, bucket);
-  const doc = parse(readFileSync(resolve(dir, `${name}.yaml`), 'utf8'));
-  const expected = JSON.parse(
-    readFileSync(resolve(dir, `${name}.expected.json`), 'utf8'),
+function source(bucket: string, name: string): string {
+  return readFileSync(resolve(corpusRoot, bucket, `${name}.yaml`), 'utf8');
+}
+
+function expectation(bucket: string, name: string): Expectation {
+  return JSON.parse(
+    readFileSync(resolve(corpusRoot, bucket, `${name}.expected.json`), 'utf8'),
   ) as Expectation;
-  return { doc, expected };
 }
 
 describe('conformance corpus v1 — structural (JSON Schema)', () => {
   for (const bucket of ['valid', 'invalid'] as const) {
     for (const name of casesIn(bucket)) {
       it(`${bucket}/${name}`, () => {
-        const { doc, expected } = load(bucket, name);
+        const doc = parse(source(bucket, name));
+        const expected = expectation(bucket, name);
         const result = validateStructure(doc);
         expect(result.valid).toBe(expected.structurallyValid);
+      });
+    }
+  }
+});
+
+// The semantic half: the full `checkFlow` gate (safe-subset parse + decode +
+// validate) run over the raw YAML, asserted against each case's `semantic`
+// expectation. The Rust crate runs the SAME corpus (Phase 2 step 4), so the
+// two validators cannot disagree on acceptance.
+//
+// `errors` lists a case's *characteristic* codes, not its exhaustive set — a
+// single defect can cascade (a dangling exit also traps the caller). So the
+// contract is: overall acceptance matches (`valid === semantic.ok`), and every
+// listed code is reported (subset), never exact-set equality — which would
+// force the frozen corpus to enumerate incidental cascade errors.
+describe('conformance corpus v1 — semantic (checkFlow)', () => {
+  for (const bucket of ['valid', 'invalid'] as const) {
+    for (const name of casesIn(bucket)) {
+      it(`${bucket}/${name}`, () => {
+        const expected = expectation(bucket, name);
+        const result = checkFlow(source(bucket, name));
+        expect(result.valid).toBe(expected.semantic.ok);
+        const reported = new Set(result.issues.map((issue) => issue.code));
+        for (const code of expected.semantic.errors) {
+          expect(reported, `expected semantic error "${code}" for ${bucket}/${name}`).toContain(
+            code,
+          );
+        }
       });
     }
   }

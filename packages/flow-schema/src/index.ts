@@ -1,23 +1,36 @@
 // @wavekat/flow-schema — public surface.
 //
-// Phase 1 (this milestone): the generated model types + a structural
-// validator driven by the normative JSON Schema. The hand-written
-// authoring logic that the platform relies on today (safe-subset YAML
-// parsing, comment-preserving mutation, semantic validation, hours math)
-// moves in during Phase 2 (see repo README "Roadmap"); until then the
-// platform keeps its in-repo copy. Import paths are kept identical so the
-// Phase 3 swap is a dependency change, not a code change.
+// The generated model types (from the normative JSON Schema) plus the
+// hand-written authoring logic consolidated here in Phase 2: safe-subset
+// YAML parsing/decoding, semantic validation (reachability, exit wiring,
+// hours math, DTMF/prompt rules), and the one-call `checkFlow` gate. The
+// model *helpers* (`requiredExits`, `isTerminal`, …) are hand-written
+// twins layered on the generated types — logic, not shape (see
+// `src/model.ts`). Import paths are kept identical to the platform's
+// in-repo copy so the Phase 3 swap is a dependency change, not a code
+// change.
+//
+// Still living in the consumer repos (later Phase 2 steps): comment-
+// preserving `mutate.ts` (TS-only) and the Rust engine.
 
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject } from 'ajv';
 
 import schema from './generated/flow.v1.schema.json' with { type: 'json' };
 
-export * from './generated/model.js';
+// Model: generated types + hand-written constants & helpers.
+export * from './model.js';
 export { schema as flowV1Schema };
 
-/** Schema versions this package's schema describes. */
-export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1];
+// Issues, parsing, validation, and the combined gate.
+export type { Issue } from './issues.js';
+export { MISSING_ASSET, hasErrors } from './issues.js';
+export type { ParseResult } from './parse.js';
+export { parseFlow } from './parse.js';
+export { validateFlow } from './validate.js';
+export type { FlowCheck } from './check.js';
+export { checkFlow } from './check.js';
+export { isValidDate, isValidTimezone, parseTimeMinutes, validateHours } from './hours.js';
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateFn = ajv.compile(schema);
@@ -28,8 +41,8 @@ export type StructuralResult =
 
 /**
  * Validate an already-parsed document against the normative JSON Schema
- * (structure only — no reachability / exit-wiring / hours semantics;
- * those arrive with the validator in Phase 2).
+ * (structure only — no reachability / exit-wiring / hours semantics; use
+ * `checkFlow` / `validateFlow` for those).
  */
 export function validateStructure(doc: unknown): StructuralResult {
   const valid = validateFn(doc);
