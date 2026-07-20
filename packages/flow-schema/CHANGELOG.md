@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.8](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.7...flow-schema-v0.0.8) (2026-07-20)
+
+
+### Features
+
+* **flow-schema:** add flow version diff ([#34](https://github.com/wavekat/wavekat-flow/issues/34)) ([218802e](https://github.com/wavekat/wavekat-flow/commit/218802ea54de4036672ad7cd344373e3fc7a0ed6))
+
 ## [0.0.7](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.6...flow-schema-v0.0.7) (2026-07-20)
 
 
