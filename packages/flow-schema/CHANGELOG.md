@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.7](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.6...flow-schema-v0.0.7) (2026-07-20)
+
+
+### Bug Fixes
+
+* **flow-schema:** decode audio prompt transcript in TS parser ([#32](https://github.com/wavekat/wavekat-flow/issues/32)) ([dd8761a](https://github.com/wavekat/wavekat-flow/commit/dd8761a474bb2783211e0b62e1c0e66469778923))
+
 ## [0.0.6](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.5...flow-schema-v0.0.6) (2026-07-20)
 
 
