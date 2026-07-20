@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.6](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.5...flow-schema-v0.0.6) (2026-07-20)
+
+
+### Features
+
+* carry an audio prompt's transcript text ([#30](https://github.com/wavekat/wavekat-flow/issues/30)) ([1e531e4](https://github.com/wavekat/wavekat-flow/commit/1e531e40a353ecba8acfaccb7210bd8338823df5))
+
 ## [0.0.5](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.4...flow-schema-v0.0.5) (2026-07-19)
 
 
