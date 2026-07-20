@@ -134,7 +134,14 @@ export function requiredExits(node: Node): string[] {
   }
 }
 
-/** The spoken text, or `null` for an audio-asset prompt. */
+/**
+ * The *synthesizable* text: the string for a bare-text prompt the engine
+ * speaks with TTS, or `null` for an audio-asset prompt it plays as a clip.
+ * Drives playback branching and the length cap. An audio prompt's transcript
+ * is display text, not something to synthesize — for the human-readable words
+ * either kind speaks, use {@link promptTranscript}. Twin: `model_ext.rs`
+ * `Prompt::as_text`.
+ */
 export function promptText(prompt: Prompt): string | null {
   return typeof prompt === 'string' ? prompt : null;
 }
@@ -142,6 +149,20 @@ export function promptText(prompt: Prompt): string | null {
 /** The audio asset ref, or `null` for a text prompt. */
 export function promptAudio(prompt: Prompt): string | null {
   return typeof prompt === 'string' ? null : prompt.audio;
+}
+
+/**
+ * The human-readable words this prompt speaks, for display (a "what the
+ * caller hears" transcript) and traces, regardless of how it is voiced. A
+ * text prompt is its own transcript; an audio prompt carries the text it was
+ * synthesized from in `transcript`, `null` when the document omits it (older
+ * flows, or a ref not generated from text). Unlike {@link promptText}, never
+ * used to decide playback or enforce the length cap. Twin: `model_ext.rs`
+ * `Prompt::transcript`.
+ */
+export function promptTranscript(prompt: Prompt): string | null {
+  if (typeof prompt === 'string') return prompt;
+  return typeof prompt.transcript === 'string' ? prompt.transcript : null;
 }
 
 /**

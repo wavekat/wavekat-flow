@@ -19,7 +19,8 @@ The schema owns **structure only**:
 - the field set and types of `Flow` and every node kind,
 - the `kind` discriminated union (`greeting`, `hours`, `menu`, `ring`,
   `message`, `transfer`, `hangup`),
-- enums (`MessageTone`), the `Prompt` = `string | { audio }` shape,
+- enums (`MessageTone`), the `Prompt` = `string | { audio, transcript? }` shape
+  (`transcript` is the optional text an audio clip was synthesized from),
 - required vs. optional fields and their defaults,
 - `schema_version` pinned to `1` (a document declaring another version does not
   validate against *this* file — it validates against that version's file).

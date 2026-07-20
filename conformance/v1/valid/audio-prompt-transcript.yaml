@@ -1,0 +1,15 @@
+schema_version: 1
+id: flow_audio_transcript
+name: Generated-clip prompts with transcripts
+entry: welcome
+nodes:
+  welcome:
+    kind: greeting
+    prompt: { audio: vprompt_ab12cd34, transcript: Thanks for calling Luigi's! }
+    exits: { next: vm }
+  vm:
+    kind: message
+    # An audio prompt without a transcript stays valid — the field is optional.
+    prompt: { audio: vprompt_ff00ee11 }
+    max_secs: 90
+    tone: none

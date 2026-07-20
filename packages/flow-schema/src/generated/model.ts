@@ -67,6 +67,10 @@ export interface Audio {
    * Audio asset ref. A generated-clip ref is a voice_prompts id matching ^vprompt_[a-z0-9]+$.
    */
   audio: string;
+  /**
+   * The words this pre-rendered clip speaks — the text it was synthesized from — carried so a viewer can show what a caller hears, and for traces. Advisory only: playback always uses `audio`, never this. Optional and forward-added: absent on older documents and on refs the platform did not generate from text.
+   */
+  transcript?: string;
   [k: string]: unknown;
 }
 /**
