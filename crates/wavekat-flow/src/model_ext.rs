@@ -80,12 +80,31 @@ impl Node {
 }
 
 impl Prompt {
-    /// The spoken text, or `None` for an audio-asset prompt. Handy for
-    /// traces and length validation.
+    /// The *synthesizable* text: `Some` for a bare-string prompt the engine
+    /// speaks with TTS, `None` for an audio-asset prompt it plays as a clip.
+    /// This drives playback branching and the length cap — an audio prompt's
+    /// transcript, when present, is *not* returned here (it is display text,
+    /// not something to synthesize or bound). For the human-readable words
+    /// either kind speaks, use [`Prompt::transcript`].
     pub fn as_text(&self) -> Option<&str> {
         match self {
             Prompt::Text(t) => Some(t.as_str()),
             Prompt::Audio { .. } => None,
+        }
+    }
+
+    /// The human-readable words this prompt speaks, for display (a "what the
+    /// caller hears" transcript) and traces — regardless of how it is voiced.
+    /// A text prompt is its own transcript; an audio prompt carries the text
+    /// it was synthesized from in `transcript`, `None` when the document omits
+    /// it (older flows, or a ref not generated from text). Unlike [`as_text`],
+    /// this is never used to decide playback or enforce the length cap.
+    ///
+    /// [`as_text`]: Prompt::as_text
+    pub fn transcript(&self) -> Option<&str> {
+        match self {
+            Prompt::Text(t) => Some(t.as_str()),
+            Prompt::Audio { transcript, .. } => transcript.as_deref(),
         }
     }
 }
@@ -110,5 +129,67 @@ impl Flow {
     /// round-trips).
     pub fn to_yaml(&self) -> Result<String, serde_yaml_ng::Error> {
         serde_yaml_ng::to_string(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::Prompt;
+
+    #[test]
+    fn as_text_is_synthesizable_text_only() {
+        // A bare-string prompt is TTS the engine speaks.
+        let text = Prompt::Text("open eleven to ten".into());
+        assert_eq!(text.as_text(), Some("open eleven to ten"));
+
+        // An audio prompt is a clip — never synthesizable, even when it
+        // carries a transcript. `as_text` drives playback + the length cap,
+        // so it must stay `None` here.
+        let audio = Prompt::Audio {
+            audio: "vprompt_ab12cd34".into(),
+            transcript: Some("open eleven to ten".into()),
+        };
+        assert_eq!(audio.as_text(), None);
+    }
+
+    #[test]
+    fn transcript_is_the_spoken_words_regardless_of_voicing() {
+        // Text prompt is its own transcript.
+        let text = Prompt::Text("open eleven to ten".into());
+        assert_eq!(text.transcript(), Some("open eleven to ten"));
+
+        // Audio prompt surfaces the text it was synthesized from.
+        let with_text = Prompt::Audio {
+            audio: "vprompt_ab12cd34".into(),
+            transcript: Some("open eleven to ten".into()),
+        };
+        assert_eq!(with_text.transcript(), Some("open eleven to ten"));
+
+        // No transcript recorded (older flow / non-generated ref) → None.
+        let without_text = Prompt::Audio {
+            audio: "vprompt_ff00ee11".into(),
+            transcript: None,
+        };
+        assert_eq!(without_text.transcript(), None);
+    }
+
+    #[test]
+    fn audio_transcript_round_trips_through_yaml() {
+        let with = "{ audio: vprompt_ab12cd34, transcript: open eleven to ten }";
+        let parsed: Prompt = serde_yaml_ng::from_str(with).unwrap();
+        assert_eq!(parsed.transcript(), Some("open eleven to ten"));
+
+        // Re-serialize and re-parse: the transcript survives the trip.
+        let yaml = serde_yaml_ng::to_string(&parsed).unwrap();
+        let reparsed: Prompt = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(reparsed.transcript(), Some("open eleven to ten"));
+
+        // The field is optional: a bare ref still parses, with no transcript,
+        // and is skipped on the way back out (no `transcript: null` noise).
+        let bare: Prompt = serde_yaml_ng::from_str("{ audio: vprompt_ff00ee11 }").unwrap();
+        assert_eq!(bare.transcript(), None);
+        assert!(!serde_yaml_ng::to_string(&bare)
+            .unwrap()
+            .contains("transcript"));
     }
 }

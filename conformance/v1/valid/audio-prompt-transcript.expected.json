@@ -1,0 +1,5 @@
+{
+  "description": "Exercises the optional `text` transcript on an audio prompt (present on one node, absent on another) — additive and always structurally valid.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}
