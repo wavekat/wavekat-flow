@@ -26,6 +26,10 @@ import schema from './generated/schema.js';
 export * from './model.js';
 export { schema as flowV1Schema };
 
+// Structural diff between two flows (authoring-only, TS-only — like mutate.ts).
+export type { FieldChange, FlowDiff, FlowDiffStatus, NodeDiff } from './diff.js';
+export { diffFlows } from './diff.js';
+
 // Issues, parsing, validation, and the combined gate.
 export type { Issue } from './issues.js';
 export { MISSING_ASSET, hasErrors } from './issues.js';
