@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseFlow } from '../src/parse.js';
-import { requiredAssets } from '../src/model.js';
+import { promptTranscript, requiredAssets } from '../src/model.js';
 
 // The doc 48 "flow document, sketched" example — kept in sync with the
 // Rust side's `model::tests::LUIGIS` on purpose: both must stay valid.
@@ -121,6 +121,39 @@ nodes:
     const node = flow?.nodes['g'];
     expect(node?.kind === 'hangup' && node.prompt).toEqual({ audio: 'bye.wav' });
     expect(flow ? requiredAssets(flow) : []).toEqual(['bye.wav']);
+  });
+
+  it('carries an audio prompt transcript through decode without warning', () => {
+    const { flow, issues } = parseFlow(`
+schema_version: 1
+id: f
+name: n
+entry: g
+nodes:
+  g:
+    kind: hangup
+    prompt: { audio: vprompt_ab12, transcript: Thanks for calling! }
+`);
+    const node = flow?.nodes['g'];
+    const prompt = node?.kind === 'hangup' ? node.prompt : undefined;
+    expect(prompt).toEqual({ audio: 'vprompt_ab12', transcript: 'Thanks for calling!' });
+    expect(prompt && promptTranscript(prompt)).toBe('Thanks for calling!');
+    // The field the schema added in #30 must not read as unknown.
+    expect(issues.filter((issue) => issue.code === 'unknown_field')).toHaveLength(0);
+  });
+
+  it('rejects a non-string audio prompt transcript', () => {
+    const { issues } = parseFlow(`
+schema_version: 1
+id: f
+name: n
+entry: g
+nodes:
+  g:
+    kind: hangup
+    prompt: { audio: vprompt_ab12, transcript: 42 }
+`);
+    expect(issues.some((issue) => issue.code === 'expected_string')).toBe(true);
   });
 
   it('rejects duplicate keys at any nesting level', () => {
