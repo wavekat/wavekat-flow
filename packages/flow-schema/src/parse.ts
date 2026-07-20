@@ -145,11 +145,18 @@ function decodePrompt(value: unknown, label: string, issues: Issue[]): Prompt | 
   if (isScalar(value) && typeof value.value === 'string') return value.value;
   if (isMap(value)) {
     const fields = fieldsOf(value, label, issues);
-    warnUnknownFields(fields, ['audio'], label, issues);
+    // `transcript` is the words the clip speaks, carried for display and
+    // traces (model `Audio.transcript`); advisory only — playback still uses
+    // `audio`. Known here so it neither warns nor gets dropped on decode.
+    warnUnknownFields(fields, ['audio', 'transcript'], label, issues);
     const audio = fields.get('audio');
     if (audio) {
       const ref = asString(audio.value, `${label} audio`, issues);
-      return ref === undefined ? undefined : { audio: ref };
+      if (ref === undefined) return undefined;
+      const transcriptField = fields.get('transcript');
+      if (!transcriptField) return { audio: ref };
+      const transcript = asString(transcriptField.value, `${label} transcript`, issues);
+      return transcript === undefined ? undefined : { audio: ref, transcript };
     }
   }
   error(issues, 'bad_prompt', `${label} must be text or { audio: ref }`, value);
