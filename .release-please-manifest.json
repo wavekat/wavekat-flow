@@ -1,4 +1,4 @@
 {
-  "packages/flow-schema": "0.0.5",
-  "crates/wavekat-flow": "0.0.3"
+  "packages/flow-schema": "0.0.6",
+  "crates/wavekat-flow": "0.0.4"
 }

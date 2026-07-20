@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.4](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.3...wavekat-flow-v0.0.4) (2026-07-20)
+
+
+### Features
+
+* carry an audio prompt's transcript text ([#30](https://github.com/wavekat/wavekat-flow/issues/30)) ([1e531e4](https://github.com/wavekat/wavekat-flow/commit/1e531e40a353ecba8acfaccb7210bd8338823df5))
+
 ## [0.0.3](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.2...wavekat-flow-v0.0.3) (2026-07-19)
 
 
