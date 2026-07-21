@@ -114,6 +114,18 @@ pub trait FlowEffects: Send {
     /// The current instant, for `hours` evaluation. Injectable so tests pin a
     /// fixed time and the schedule is deterministic.
     fn now(&self) -> OffsetDateTime;
+
+    /// Called once as the engine *enters* a node, before that node's own
+    /// effects run — carries the node's id and its component kind
+    /// ([`Node::kind`], e.g. `"greeting"`, `"menu"`). Lets a live consumer
+    /// light up which node is executing *right now*, and accumulate the path
+    /// the caller has taken, without waiting for the run-end trace.
+    ///
+    /// Default no-op: the durable, ordered per-node record is the trace
+    /// ([`Trace`]); a consumer that only reads results at run end ignores
+    /// this. Fires for every visited node including `hours` (which runs no
+    /// other effect) and a node re-entered by a menu loop.
+    fn on_enter(&mut self, _node: &NodeId, _kind: &'static str) {}
 }
 
 /// Engine-internal failure. `Effect` is an outside failure (call dropped) →
@@ -199,6 +211,10 @@ async fn run_node<E: FlowEffects>(
     trace: &mut Trace,
 ) -> Result<Step, EngineError> {
     let kind = node.kind();
+    // Announce the node the instant the engine reaches it — before any
+    // prompt plays or digit is collected — so a live view reflects the
+    // caller's true position, not where they were a prompt ago.
+    fx.on_enter(id, kind);
     match node {
         Node::Greeting { prompt, .. } => {
             fx.speak(prompt).await.map_err(EngineError::Effect)?;
@@ -382,6 +398,9 @@ mod tests {
         record_tone: Option<MessageTone>,
         hung_up: bool,
         fail_speak: bool,
+        /// Every node the engine entered, in visit order (id, kind) — the
+        /// live-position signal `on_enter` feeds.
+        entered: Vec<(String, &'static str)>,
     }
 
     impl MockEffects {
@@ -397,6 +416,7 @@ mod tests {
                 record_tone: None,
                 hung_up: false,
                 fail_speak: false,
+                entered: Vec::new(),
             }
         }
         fn digits(mut self, seq: impl IntoIterator<Item = Option<Digit>>) -> Self {
@@ -458,6 +478,9 @@ mod tests {
         }
         fn now(&self) -> OffsetDateTime {
             self.now
+        }
+        fn on_enter(&mut self, node: &NodeId, kind: &'static str) {
+            self.entered.push((node.clone(), kind));
         }
     }
 
@@ -535,6 +558,57 @@ nodes:
         // The hours branch went `open`.
         assert_eq!(trace.steps[1].detail, StepDetail::Hours { open: true });
         assert!(!fx.recorded, "a human answered — no voicemail");
+    }
+
+    #[tokio::test]
+    async fn on_enter_reports_each_node_as_the_engine_reaches_it() {
+        // Human answers during open hours: greeting → hours → ring. The
+        // effect-less `hours` node still announces itself, so a live view
+        // can light it — the whole point of the hook over the effect calls.
+        let mut fx = MockEffects::new(open_time()).ring(RingOutcome::Answered);
+        let _ = run_trace(&luigis(), &mut fx).await;
+        assert_eq!(
+            fx.entered,
+            vec![
+                ("welcome".to_string(), "greeting"),
+                ("check_hours".to_string(), "hours"),
+                ("front_desk".to_string(), "ring"),
+            ],
+            "on_enter fires once per visited node, in path order"
+        );
+
+        // Closed → press 1 → hours greeting → voicemail: the live position
+        // tracks every hop, and the ids line up with the run-end trace.
+        let mut fx = MockEffects::new(closed_time())
+            .digits([Some(Digit::D1)])
+            .message_secs(12);
+        let trace = run_trace(&luigis(), &mut fx).await;
+        let entered_ids: Vec<&str> = fx.entered.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(
+            entered_ids,
+            vec![
+                "welcome",
+                "check_hours",
+                "night_menu",
+                "say_hours",
+                "take_message"
+            ],
+        );
+        // A menu's internal retries don't re-enter the node — it's announced
+        // once even though run_menu may loop for a bad/absent key.
+        assert_eq!(
+            fx.entered
+                .iter()
+                .filter(|(id, _)| id == "night_menu")
+                .count(),
+            1,
+        );
+        // Every node the trace recorded is a node on_enter announced. The
+        // message node traces twice (prompt, then recording) but is entered
+        // once, so collapse consecutive repeats before comparing.
+        let mut trace_nodes: Vec<&str> = trace.steps.iter().map(|s| s.node.as_str()).collect();
+        trace_nodes.dedup();
+        assert_eq!(entered_ids, trace_nodes);
     }
 
     #[tokio::test]
