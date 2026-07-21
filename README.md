@@ -31,8 +31,8 @@ risk by making the format's definition live in exactly one place.
 ```
 schema/flow.v1.schema.json     # THE source of truth — the normative document shape
 conformance/v1/                # the cross-language contract: docs + expected outcomes
-packages/flow-schema/          # @wavekat/flow-schema  (npm)   — types GENERATED from the schema
-crates/wavekat-flow/           # wavekat-flow          (crate) — types GENERATED from the schema
+packages/flow-schema/          # @wavekat/flow-schema  (npm)   — generated types + authoring logic
+crates/wavekat-flow/           # wavekat-flow          (crate) — generated types + validator + engine
 ```
 
 - **The schema is authoritative.** Both the TypeScript package and the Rust
@@ -40,11 +40,18 @@ crates/wavekat-flow/           # wavekat-flow          (crate) — types GENERAT
   (`json-schema-to-typescript` and `typify` respectively). Neither hand-writes
   the model; CI fails on drift.
 - **The corpus is the contract.** Every document in `conformance/` carries its
-  expected outcome, and **both languages run it** — TS with `ajv`, Rust with
-  `jsonschema` — so structural validity means the identical thing on both
-  sides. This is also the **backward-compatibility guarantee**: a corpus case
-  is frozen once added, so a schema change that would reject a previously-valid
-  document fails CI. See [`conformance/README.md`](./conformance/README.md).
+  expected outcome — structural *and* semantic — and **both languages run
+  it**, so a document means the identical thing on both sides. This is also
+  the **backward-compatibility guarantee**: a corpus case is frozen once
+  added, so a schema change that would reject a previously-valid document
+  fails CI. See [`conformance/README.md`](./conformance/README.md).
+- **The logic lives here too.** Beyond the generated model, each package
+  carries its language's hand-written half of the format:
+  [`@wavekat/flow-schema`](./packages/flow-schema/README.md) — safe-subset
+  YAML parsing, semantic validation, hours math, comment-preserving source
+  edits, and flow diffing (authoring side);
+  [`wavekat-flow`](./crates/wavekat-flow/README.md) — semantic validation,
+  hours math, and the flow interpreter with its run trace (execution side).
 
 ## What a schema *cannot* own
 
@@ -52,8 +59,8 @@ A JSON Schema defines the document **shape** (types, enums, required fields,
 the `kind` discriminated union, defaults). It cannot express the format's
 **semantic rules** — graph reachability, exit-set exactness, hours/timezone
 math, DTMF digit validity, prompt length, safe-subset YAML parsing,
-comment-preserving edits, or the interpreter. Those are hand-written per
-language and **pinned by the shared corpus**, not generated. See
+comment-preserving edits, or the interpreter. Those live here as hand-written
+code per language — **pinned by the shared corpus**, not generated. See
 [`schema/README.md`](./schema/README.md) for the exact boundary.
 
 ## Versioning
@@ -70,26 +77,24 @@ language and **pinned by the shared corpus**, not generated. See
   break API, and nothing is promised beyond "the corpus is green". They move
   past `0.0.x` once the consumer repos have adopted the published packages.
 
-## Roadmap
+## Status
 
-This repo is being stood up in phases. Consumers are **not** migrated until
-the repo is public (decision on record), so phases 1–2 are self-contained here.
-The detailed, checkbox-level task list lives in
-**[`docs/ROADMAP.md`](./docs/ROADMAP.md)**.
+The consolidation was staged in three phases; the checkbox-level detail lives
+in **[`docs/ROADMAP.md`](./docs/ROADMAP.md)**.
 
-- **Phase 1 — foundation (this milestone).** The normative schema, the
-  conformance corpus + back-compat runner, and both packages generating their
-  **model types** from the schema with the corpus green in TS and Rust. Semantic
-  logic still lives in the consumer repos.
-- **Phase 2 — full consolidation.** Move the hand-written logic in (TS:
-  safe-subset parse, comment-preserving mutation, semantic validation, hours;
-  Rust: validation, hours, engine, trace), each adapted to the generated types
-  and covered by the corpus. Retire the duplicated test suites in favour of the
-  shared corpus.
-- **Phase 3 — publish & adopt.** Flip the repo public, publish
-  `@wavekat/flow-schema` to npm and `wavekat-flow` to crates.io, and switch
-  the platform and the voice daemon from their in-repo copies to the
-  published artifacts.
+- **Phase 1 — foundation. Done.** The normative schema, the conformance
+  corpus + back-compat runner, and both packages generating their model types
+  from the schema, corpus green in TS and Rust.
+- **Phase 2 — full consolidation. Done.** The hand-written logic moved in
+  (TS: safe-subset parse, comment-preserving mutation, semantic validation,
+  hours; Rust: validation, hours, engine, trace), each adapted to the
+  generated types, with the corpus extended to pin the semantic outcomes in
+  both languages.
+- **Phase 3 — publish & adopt. In progress.** The repo is public and both
+  packages are published (releases are cut automatically by release-please
+  from a single combined release PR). Remaining: switch the platform and the
+  voice daemon from their in-repo copies to the published artifacts, and
+  migrate the narrative format spec (doc 48) into `docs/`.
 
 This extends the "Placement" section of doc 48 (the original call-flow design
 doc), which had planned only to publish the JSON Schema and extract the Rust
