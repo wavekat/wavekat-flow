@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.4...wavekat-flow-v0.0.5) (2026-07-21)
+
+
+### Features
+
+* **engine:** add on_enter node-entry hook ([#37](https://github.com/wavekat/wavekat-flow/issues/37)) ([5bb37c1](https://github.com/wavekat/wavekat-flow/commit/5bb37c1d1809efaa25b91963002f3e2731a62fd0))
+
 ## [0.0.4](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.3...wavekat-flow-v0.0.4) (2026-07-20)
 
 
