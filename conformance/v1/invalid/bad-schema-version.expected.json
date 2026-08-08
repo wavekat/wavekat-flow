@@ -1,5 +1,5 @@
 {
-  "description": "schema_version 2 does not validate against the v1 schema (const 1). The semantic validator reports unsupported_schema_version.",
+  "description": "A schema_version no build knows validates against no version's schema, and the semantic validator reports unsupported_schema_version. The case originally used version 2 as its example of 'unsupported', which stopped being true the day version 2 shipped (the `book` component); the number was moved out of reach rather than the expectation being weakened — what this case pins is that an unknown version is refused, not that any particular number is unknown. Pick a still-higher number if 99 is ever real.",
   "structurallyValid": false,
   "semantic": { "ok": false, "errors": ["unsupported_schema_version"] }
 }

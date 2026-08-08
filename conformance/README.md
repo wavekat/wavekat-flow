@@ -16,6 +16,7 @@ conformance/
     invalid/
       <case>.yaml
       <case>.expected.json
+  v2/                       # `book` — same layout, its own frozen cases
 ```
 
 Every `<case>.yaml` has a sibling `<case>.expected.json`:
@@ -57,6 +58,19 @@ reject it, or flip an `invalid/` verdict, fails CI. This is what enforces
 "changes must not break previous configs": to evolve the format incompatibly
 you cut a new `schema_version` with its own corpus directory, never mutate an
 existing one.
+
+The one thing that legitimately forces a case to change is a case whose
+*premise* the format outgrew, as opposed to its verdict. `v1/invalid/
+bad-schema-version` said "version 2 is unsupported", which stopped being true
+the day version 2 shipped; the number moved out of reach and the expectation
+stayed exactly where it was. That is the allowed shape of an edit: keep what
+the case pins, remove the accident it depended on, and say so in its
+`description`. Weakening an expectation to make a build pass is not.
+
+A case lives under the version its document **declares**, not the version that
+can read it. `v1/invalid/book-needs-v2` uses a component that arrived in v2 —
+it belongs to v1, because what it pins is how a *version-1 document* is
+treated.
 
 When you add a real-world flow that surfaced a bug, add it here as a permanent
 regression case.

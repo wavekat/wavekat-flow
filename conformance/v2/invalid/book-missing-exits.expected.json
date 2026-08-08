@@ -1,0 +1,5 @@
+{
+  "description": "The happy path is wired and the three unhappy ones are not. This is the mistake `book` exists to make impossible: no_slots, no_input and unavailable are exactly the exits an author forgets, and an unwired `unavailable` is a dead line on the day the calendar provider has an outage.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["missing_exits"] }
+}

@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 99
 id: flow_bad
 name: Unsupported schema version
 entry: hello

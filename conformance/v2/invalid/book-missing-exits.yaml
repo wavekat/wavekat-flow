@@ -1,0 +1,16 @@
+schema_version: 2
+id: flow_half_wired
+name: Booking with nowhere to fall
+entry: take_booking
+nodes:
+  take_booking:
+    kind: book
+    prompt: I can book you in.
+    confirm_prompt: You're booked for
+    timezone: UTC
+    schedule:
+      tue: [{ open: "09:00", close: "17:00" }]
+    duration_mins: 30
+    exits: { booked: goodbye }
+  goodbye:
+    kind: hangup

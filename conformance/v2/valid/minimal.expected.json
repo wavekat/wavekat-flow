@@ -1,0 +1,5 @@
+{
+  "description": "Version 2 is version 1 plus the `book` component and nothing else: a document that uses none of the new surface is the same document it was, and must still validate once its schema_version is bumped.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

@@ -1,11 +1,16 @@
 //! The Rust half of the shared conformance corpus. Every case in
-//! `conformance/v1/{valid,invalid}` is validated against the normative
-//! JSON Schema with a real draft-2020-12 validator (mirroring the TS
-//! side's ajv), so `structurallyValid` means the identical thing in both
-//! languages. Valid cases are additionally deserialized into the
-//! schema-generated model, proving the generated types accept real
-//! documents. The TS package runs the SAME corpus
+//! `conformance/vN/{valid,invalid}` is validated against the normative
+//! JSON Schema **for the version it declares**, with a real draft-2020-12
+//! validator (mirroring the TS side's ajv), so `structurallyValid` means
+//! the identical thing in both languages. Valid cases are additionally
+//! deserialized into the schema-generated model, proving the generated
+//! types accept real documents. The TS package runs the SAME corpus
 //! (packages/flow-schema/test/conformance.test.ts).
+//!
+//! One directory per format version. A case lives under the version its
+//! document *declares*, not the version that can read it: the v1 case
+//! using a `book` node belongs to v1, because what it pins is how a
+//! version-1 document is treated.
 
 use std::{fs, path::PathBuf};
 
@@ -25,14 +30,32 @@ struct Semantic {
     errors: Vec<String>,
 }
 
-fn corpus_dir(bucket: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../conformance/v1")
-        .join(bucket)
+fn corpus_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance")
 }
 
-fn yaml_cases(bucket: &str) -> Vec<(String, PathBuf)> {
-    let dir = corpus_dir(bucket);
+/// Every `vN` directory present, so a new version's cases run the moment
+/// the directory exists rather than when someone remembers a list.
+fn corpus_versions() -> Vec<String> {
+    let mut versions: Vec<String> = fs::read_dir(corpus_root())
+        .expect("read corpus root")
+        .filter_map(|entry| {
+            let name = entry.ok()?.file_name().to_str()?.to_string();
+            let rest = name.strip_prefix('v')?;
+            rest.chars().all(|c| c.is_ascii_digit()).then_some(name)
+        })
+        .collect();
+    versions.sort_by_key(|v| v[1..].parse::<u32>().unwrap_or(0));
+    assert!(!versions.is_empty(), "corpus has no vN directories");
+    versions
+}
+
+fn corpus_dir(version: &str, bucket: &str) -> PathBuf {
+    corpus_root().join(version).join(bucket)
+}
+
+fn yaml_cases(version: &str, bucket: &str) -> Vec<(String, PathBuf)> {
+    let dir = corpus_dir(version, bucket);
     let mut out = Vec::new();
     for entry in fs::read_dir(&dir).expect("read corpus dir") {
         let path = entry.unwrap().path();
@@ -46,32 +69,41 @@ fn yaml_cases(bucket: &str) -> Vec<(String, PathBuf)> {
 
 #[test]
 fn corpus_structural_matches_expectations() {
-    let schema: serde_json::Value =
-        serde_json::from_str(wavekat_flow::FLOW_V1_SCHEMA).expect("schema json");
-    let validator = jsonschema::validator_for(&schema).expect("compile schema");
+    for version in corpus_versions() {
+        let number: u32 = version[1..].parse().expect("vN directory name");
+        let schema: serde_json::Value = serde_json::from_str(
+            wavekat_flow::flow_schema(number)
+                .unwrap_or_else(|| panic!("no schema for corpus directory {version}")),
+        )
+        .expect("schema json");
+        let validator = jsonschema::validator_for(&schema).expect("compile schema");
 
-    for bucket in ["valid", "invalid"] {
-        for (stem, path) in yaml_cases(bucket) {
-            let doc: serde_json::Value =
-                serde_yaml_ng::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-            let exp_path = corpus_dir(bucket).join(format!("{stem}.expected.json"));
-            let exp: Expectation =
-                serde_json::from_str(&fs::read_to_string(exp_path).unwrap()).unwrap();
-            assert_eq!(
-                validator.is_valid(&doc),
-                exp.structurally_valid,
-                "structural verdict mismatch for {bucket}/{stem}"
-            );
+        for bucket in ["valid", "invalid"] {
+            for (stem, path) in yaml_cases(&version, bucket) {
+                let doc: serde_json::Value =
+                    serde_yaml_ng::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+                let exp_path = corpus_dir(&version, bucket).join(format!("{stem}.expected.json"));
+                let exp: Expectation =
+                    serde_json::from_str(&fs::read_to_string(exp_path).unwrap()).unwrap();
+                assert_eq!(
+                    validator.is_valid(&doc),
+                    exp.structurally_valid,
+                    "structural verdict mismatch for {version}/{bucket}/{stem}"
+                );
+            }
         }
     }
 }
 
 #[test]
 fn valid_corpus_deserializes_into_generated_model() {
-    for (stem, path) in yaml_cases("valid") {
-        let yaml = fs::read_to_string(&path).unwrap();
-        serde_yaml_ng::from_str::<wavekat_flow::model::Flow>(&yaml)
-            .unwrap_or_else(|e| panic!("valid corpus '{stem}' should deserialize into Flow: {e}"));
+    for version in corpus_versions() {
+        for (stem, path) in yaml_cases(&version, "valid") {
+            let yaml = fs::read_to_string(&path).unwrap();
+            serde_yaml_ng::from_str::<wavekat_flow::model::Flow>(&yaml).unwrap_or_else(|e| {
+                panic!("valid corpus '{version}/{stem}' should deserialize into Flow: {e}")
+            });
+        }
     }
 }
 
@@ -114,23 +146,25 @@ fn semantic_result(yaml: &str) -> (bool, Vec<String>) {
 // force the frozen corpus to enumerate incidental cascade errors.
 #[test]
 fn corpus_semantic_matches_expectations() {
-    for bucket in ["valid", "invalid"] {
-        for (stem, path) in yaml_cases(bucket) {
-            let yaml = fs::read_to_string(&path).unwrap();
-            let exp_path = corpus_dir(bucket).join(format!("{stem}.expected.json"));
-            let exp: Expectation =
-                serde_json::from_str(&fs::read_to_string(exp_path).unwrap()).unwrap();
+    for version in corpus_versions() {
+        for bucket in ["valid", "invalid"] {
+            for (stem, path) in yaml_cases(&version, bucket) {
+                let yaml = fs::read_to_string(&path).unwrap();
+                let exp_path = corpus_dir(&version, bucket).join(format!("{stem}.expected.json"));
+                let exp: Expectation =
+                    serde_json::from_str(&fs::read_to_string(exp_path).unwrap()).unwrap();
 
-            let (accepted, codes) = semantic_result(&yaml);
-            assert_eq!(
-                accepted, exp.semantic.ok,
-                "semantic acceptance mismatch for {bucket}/{stem} (codes: {codes:?})"
-            );
-            for code in &exp.semantic.errors {
-                assert!(
-                    codes.contains(code),
-                    "expected semantic error {code:?} for {bucket}/{stem}, got {codes:?}"
+                let (accepted, codes) = semantic_result(&yaml);
+                assert_eq!(
+                    accepted, exp.semantic.ok,
+                    "semantic acceptance mismatch for {version}/{bucket}/{stem} (codes: {codes:?})"
                 );
+                for code in &exp.semantic.errors {
+                    assert!(
+                        codes.contains(code),
+                        "expected semantic error {code:?} for {version}/{bucket}/{stem}, got {codes:?}"
+                    );
+                }
             }
         }
     }

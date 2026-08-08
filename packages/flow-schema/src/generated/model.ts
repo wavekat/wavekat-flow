@@ -1,10 +1,10 @@
-// GENERATED from schema/flow.v1.schema.json by scripts/generate.mjs — do not edit.
-// Run `pnpm gen` after changing the schema; CI fails on drift.
+// GENERATED from schema/flow.v{1,2}.schema.json by scripts/generate.mjs — do not edit.
+// Run `pnpm gen` after changing a schema; CI fails on drift.
 
 /**
  * One node: a component (kind + its config) plus its wired exits. An internally-tagged union on `kind`.
  */
-export type Node = GreetingNode | HoursNode | MenuNode | RingNode | MessageNode | TransferNode | HangupNode;
+export type Node = GreetingNode | HoursNode | MenuNode | RingNode | MessageNode | TransferNode | HangupNode | BookNode;
 /**
  * What a component speaks: TTS text (a bare string) or a reference to a pre-rendered audio asset shipped alongside the flow.
  */
@@ -16,13 +16,13 @@ export type Text = string;
 export type MessageTone = 'beep' | 'none';
 
 /**
- * The WaveKat call-flow ("Receptionist") document, schema_version 1. This file is the single source of truth for the document SHAPE: every consumer (the @wavekat/flow-schema npm package, the wavekat-flow Rust crate) generates its model types from this file. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
+ * The WaveKat call-flow ("Receptionist") document, schema_version 2. Version 2 is version 1 plus the `book` component (appointment booking over the phone); every version-1 document is a valid version-2 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
  */
 export interface Flow {
   /**
-   * Document format version. This file describes version 1 only; a document declaring another version validates against that version's schema file, not this one.
+   * Document format version. This file describes version 2 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
    */
-  schema_version: 1;
+  schema_version: number;
   /**
    * Opaque platform-assigned id (flow_…). Treated as a label; appears in traces.
    */
@@ -181,6 +181,53 @@ export interface TransferNode {
 export interface HangupNode {
   kind: 'hangup';
   prompt?: Prompt;
+  exits?: Exits;
+  [k: string]: unknown;
+}
+/**
+ * Offer the caller open appointment times and book the one they choose, before the call ends. New in schema_version 2. The bookable grid is described here (weekly schedule + timezone + how long an appointment is); which times are actually free comes from the connected calendar at call time, and the engine never sees a credential. Exits: booked, no_slots, no_input, unavailable. Three fields carry more meaning than their types show, and are described here because a `$ref` with a sibling description makes the type generators emit a duplicate type instead of reusing the named one. `prompt` is spoken once before the open times are offered ("I can book you in — here are the next available times"); the times themselves are never part of it, since they are not known until the call. `confirm_prompt` is spoken immediately after a successful booking and directly BEFORE the booked time ("You're booked for" → "Tuesday" → "ten thirty a.m."); it deliberately takes no placeholder, because a prompt is frozen audio by the time a call runs and nothing can be interpolated into the middle of it — anything that should follow the time belongs on the booked exit. `schedule` is when this business takes appointments, the `hours` node's weekly shape reused verbatim; it is not the same question `hours` answers, because a business can answer the phone at times it will not book.
+ */
+export interface BookNode {
+  kind: 'book';
+  prompt: Prompt;
+  confirm_prompt: Prompt;
+  schedule: WeeklySchedule;
+  /**
+   * IANA zone (America/New_York) the schedule is written in. Validated to resolve at load.
+   */
+  timezone: string;
+  /**
+   * Single-date overrides of the weekly schedule (holidays, one-off clinics), as on `hours`.
+   */
+  exceptions?: HoursException[];
+  /**
+   * How long one appointment runs. Bounds are the validator's (see each language's validate module), not this schema's.
+   */
+  duration_mins: number;
+  /**
+   * Clear time kept on BOTH sides of an appointment, so a slot is not offered flush against a busy interval.
+   */
+  buffer_mins?: number;
+  /**
+   * Nothing sooner than this many minutes from now is offered — the caller cannot book the next five minutes.
+   */
+  lead_mins?: number;
+  /**
+   * How far ahead to look for open times.
+   */
+  horizon_days?: number;
+  /**
+   * How many times to offer the caller. Each offered time gets one keypad digit, counting from 1.
+   */
+  max_offers?: number;
+  /**
+   * Extra attempts to collect a keypress after the first, as on `menu`.
+   */
+  retries?: number;
+  /**
+   * How long to wait for a keypress on each attempt, as on `menu`.
+   */
+  timeout_secs?: number;
   exits?: Exits;
   [k: string]: unknown;
 }

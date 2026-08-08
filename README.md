@@ -12,7 +12,7 @@ Single source of truth for the [WaveKat](https://wavekat.com) call-flow
 ("Receptionist") document format.
 
 A *flow* is the declarative IVR document that powers WaveKat voice lines — a
-greeting, an hours check, a menu, voicemail, a transfer — authored as YAML,
+greeting, an hours check, a menu, voicemail, a transfer, a booking — authored as YAML,
 validated against one schema, and executed by the daemon. Two codebases need
 to read and write it:
 
@@ -29,16 +29,17 @@ risk by making the format's definition live in exactly one place.
 ## What lives here
 
 ```
-schema/flow.v1.schema.json     # THE source of truth — the normative document shape
-conformance/v1/                # the cross-language contract: docs + expected outcomes
+schema/flow.vN.schema.json     # THE source of truth — the normative document shape, one file per version
+conformance/vN/                # the cross-language contract: docs + expected outcomes, one dir per version
 packages/flow-schema/          # @wavekat/flow-schema  (npm)   — generated types + authoring logic
 crates/wavekat-flow/           # wavekat-flow          (crate) — generated types + validator + engine
 ```
 
 - **The schema is authoritative.** Both the TypeScript package and the Rust
-  crate *generate their model types from `schema/flow.v1.schema.json`*
-  (`json-schema-to-typescript` and `typify` respectively). Neither hand-writes
-  the model; CI fails on drift.
+  crate *generate their model types from the newest `schema/flow.vN.schema.json`*
+  (`json-schema-to-typescript` and `typify` respectively) — one model covers
+  every supported version, while each version's schema still validates its own
+  documents. Neither hand-writes the model; CI fails on drift.
 - **The corpus is the contract.** Every document in `conformance/` carries its
   expected outcome — structural *and* semantic — and **both languages run
   it**, so a document means the identical thing on both sides. This is also
@@ -65,10 +66,15 @@ code per language — **pinned by the shared corpus**, not generated. See
 
 ## Versioning
 
-- `schema_version` is a property of the **document** (currently `1`). Each
+- `schema_version` is a property of the **document** (currently `2`). Each
   version gets its own `schema/flow.vN.schema.json` and its own frozen
   `conformance/vN/` corpus. Growth is additive; an unsupported version is
   rejected, never silently migrated.
+- **A new component is a new version**, even though adding one is additive in
+  shape. A device running an older build has no code for the component, so it
+  has to be able to say "I don't run that version" — which is what makes it
+  safe for the platform to hold back a document rather than hand over one that
+  would fail to parse. `book` is why version 2 exists.
 - The npm package and the Rust crate version **independently** of
   `schema_version` (they track implementation releases). A given package
   release advertises which `schema_version`s it understands via
@@ -116,7 +122,7 @@ pnpm --filter @wavekat/flow-schema test        # runs the conformance corpus
 cargo test -p wavekat-flow                      # runs the conformance corpus
 ```
 
-After editing `schema/flow.v1.schema.json`, run `pnpm --filter
+After editing a `schema/flow.vN.schema.json`, run `pnpm --filter
 @wavekat/flow-schema gen` and commit the regenerated files — CI rejects drift.
 
 ## License

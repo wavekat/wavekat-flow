@@ -9,32 +9,47 @@
 // we mechanically rewrite the dialect here before handing it over. This
 // keeps ONE source file; the rewrite is deterministic and lossless for
 // the constructs this schema uses.
+//
+// One file per format version, one model for all of them: each
+// `flow.vN.schema.json` describes exactly one `schema_version` and is
+// what a document of that version is validated against, but the *types*
+// have to hold any supported version, so codegen runs on the newest
+// schema — a superset of its predecessors. The TS twin does the same in
+// packages/flow-schema/scripts/generate.mjs.
 
 use std::{env, fs, path::Path};
 
+/// Oldest first; the last entry is the one the model is generated from.
+const VERSIONS: &[u32] = &[1, 2];
+
 fn main() {
-    // In the workspace, read the normative schema at the repo root and keep
-    // the crate-local copy in sync (it is committed so the published crate
-    // is self-contained — `cargo package` only ships files under the crate
-    // root; CI fails if the copy is stale). In a packaged crate the root
-    // schema doesn't exist, so build from the shipped copy.
-    let workspace_schema = Path::new("../../schema/flow.v1.schema.json");
-    let local_schema = Path::new("schema/flow.v1.schema.json");
-    println!("cargo:rerun-if-changed=../../schema/flow.v1.schema.json");
-    println!("cargo:rerun-if-changed=schema/flow.v1.schema.json");
     println!("cargo:rerun-if-changed=build.rs");
 
-    let raw = if workspace_schema.exists() {
-        let raw = fs::read_to_string(workspace_schema).expect("read schema");
-        if fs::read_to_string(local_schema).ok().as_deref() != Some(raw.as_str()) {
-            fs::create_dir_all("schema").expect("create crate-local schema dir");
-            fs::write(local_schema, &raw).expect("sync crate-local schema copy");
-        }
-        raw
-    } else {
-        fs::read_to_string(local_schema).expect("read crate-local schema copy")
-    };
-    let mut value: serde_json::Value = serde_json::from_str(&raw).expect("parse schema json");
+    // In the workspace, read the normative schemas at the repo root and keep
+    // the crate-local copies in sync (they are committed so the published
+    // crate is self-contained — `cargo package` only ships files under the
+    // crate root; CI fails if a copy is stale). In a packaged crate the root
+    // schemas don't exist, so build from the shipped copies.
+    let mut newest = String::new();
+    for version in VERSIONS {
+        let workspace_schema = format!("../../schema/flow.v{version}.schema.json");
+        let local_schema = format!("schema/flow.v{version}.schema.json");
+        println!("cargo:rerun-if-changed={workspace_schema}");
+        println!("cargo:rerun-if-changed={local_schema}");
+
+        newest = if Path::new(&workspace_schema).exists() {
+            let raw = fs::read_to_string(&workspace_schema).expect("read schema");
+            if fs::read_to_string(&local_schema).ok().as_deref() != Some(raw.as_str()) {
+                fs::create_dir_all("schema").expect("create crate-local schema dir");
+                fs::write(&local_schema, &raw).expect("sync crate-local schema copy");
+            }
+            raw
+        } else {
+            fs::read_to_string(&local_schema).expect("read crate-local schema copy")
+        };
+    }
+
+    let mut value: serde_json::Value = serde_json::from_str(&newest).expect("parse schema json");
 
     // draft 2020-12 -> the shape typify's schema reader expects.
     rewrite_defs(&mut value);

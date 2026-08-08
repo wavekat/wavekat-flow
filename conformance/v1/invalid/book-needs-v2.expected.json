@@ -1,0 +1,5 @@
+{
+  "description": "The version rule, from the older side. `book` arrived in schema_version 2, so a document that declares 1 may not use it — structurally it matches no node in the v1 schema, and semantically a build that knows the component still refuses it rather than running a step the document's own version doesn't have. A build that predates `book` rejects the same document as unknown_kind; both refusals are correct, which is the point of pinning this here rather than only in v2.",
+  "structurallyValid": false,
+  "semantic": { "ok": false, "errors": ["kind_requires_newer_schema"] }
+}
