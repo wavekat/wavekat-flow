@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.9](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.8...flow-schema-v0.0.9) (2026-08-08)
+
+
+### Features
+
+* add the book component (schema_version 2) ([#39](https://github.com/wavekat/wavekat-flow/issues/39)) ([202f311](https://github.com/wavekat/wavekat-flow/commit/202f311f0a618b1eb99b5ee058044d09baaa9e5c))
+
 ## [0.0.8](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.7...flow-schema-v0.0.8) (2026-07-20)
 
 
