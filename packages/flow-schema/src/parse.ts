@@ -28,6 +28,14 @@ import type {
   WeeklySchedule,
 } from './model.js';
 import {
+  DEFAULT_BOOK_BUFFER_MINS,
+  DEFAULT_BOOK_HORIZON_DAYS,
+  DEFAULT_BOOK_LEAD_MINS,
+  DEFAULT_BOOK_MAX_OFFERS,
+  DEFAULT_BOOK_RETRIES,
+  DEFAULT_BOOK_TIMEOUT_SECS,
+} from './book.js';
+import {
   COMPONENT_KINDS,
   DEFAULT_MENU_RETRIES,
   DEFAULT_MENU_TIMEOUT_SECS,
@@ -263,6 +271,20 @@ const NODE_CONFIG_FIELDS: Record<string, readonly string[]> = {
   message: ['prompt', 'max_secs', 'tone'],
   transfer: ['target'],
   hangup: ['prompt'],
+  book: [
+    'prompt',
+    'confirm_prompt',
+    'schedule',
+    'timezone',
+    'exceptions',
+    'duration_mins',
+    'buffer_mins',
+    'lead_mins',
+    'horizon_days',
+    'max_offers',
+    'retries',
+    'timeout_secs',
+  ],
 };
 
 function decodeComponent(
@@ -377,6 +399,68 @@ function decodeComponent(
       if (!promptField) return { kind };
       const prompt = decodePrompt(promptField.value, `${context} prompt`, issues);
       return prompt === undefined ? undefined : { kind, prompt };
+    }
+    case 'book': {
+      const prompt = reqPrompt();
+      const confirmField = required(fields, 'confirm_prompt', context, issues, at);
+      const confirmPrompt =
+        confirmField && decodePrompt(confirmField.value, `${context} confirm_prompt`, issues);
+
+      const timezoneField = required(fields, 'timezone', context, issues, at);
+      const timezone = timezoneField && asString(timezoneField.value, `${context} timezone`, issues);
+      const scheduleField = required(fields, 'schedule', context, issues, at);
+      const schedule = scheduleField && decodeSchedule(scheduleField.value, id, issues);
+      const exceptionsField = fields.get('exceptions');
+      const exceptions = exceptionsField ? decodeExceptions(exceptionsField.value, id, issues) : [];
+
+      const durationField = required(fields, 'duration_mins', context, issues, at);
+      const duration =
+        durationField && asU32(durationField.value, `${context} duration_mins`, issues);
+
+      // Every remaining number is optional with a documented default —
+      // a missing one is not a defect, a malformed one is.
+      const optionalU32 = (name: string, fallback: number): number | undefined => {
+        const field = fields.get(name);
+        return field ? asU32(field.value, `${context} ${name}`, issues) : fallback;
+      };
+      const buffer = optionalU32('buffer_mins', DEFAULT_BOOK_BUFFER_MINS);
+      const lead = optionalU32('lead_mins', DEFAULT_BOOK_LEAD_MINS);
+      const horizon = optionalU32('horizon_days', DEFAULT_BOOK_HORIZON_DAYS);
+      const maxOffers = optionalU32('max_offers', DEFAULT_BOOK_MAX_OFFERS);
+      const retries = optionalU32('retries', DEFAULT_BOOK_RETRIES);
+      const timeout = optionalU32('timeout_secs', DEFAULT_BOOK_TIMEOUT_SECS);
+
+      if (
+        prompt === undefined ||
+        confirmPrompt === undefined ||
+        timezone === undefined ||
+        schedule === undefined ||
+        exceptions === undefined ||
+        duration === undefined ||
+        buffer === undefined ||
+        lead === undefined ||
+        horizon === undefined ||
+        maxOffers === undefined ||
+        retries === undefined ||
+        timeout === undefined
+      ) {
+        return undefined;
+      }
+      return {
+        kind,
+        prompt,
+        confirm_prompt: confirmPrompt,
+        schedule,
+        timezone,
+        exceptions,
+        duration_mins: duration,
+        buffer_mins: buffer,
+        lead_mins: lead,
+        horizon_days: horizon,
+        max_offers: maxOffers,
+        retries,
+        timeout_secs: timeout,
+      };
     }
     default:
       return undefined;

@@ -30,6 +30,7 @@ impl Node {
             Node::Message { .. } => "message",
             Node::Transfer { .. } => "transfer",
             Node::Hangup { .. } => "hangup",
+            Node::Book { .. } => "book",
         }
     }
 
@@ -58,6 +59,16 @@ impl Node {
                 names
             }
             Node::Ring { .. } => vec!["no_answer".into()],
+            // Every way out of `book` is wired, including the two nobody
+            // wants to think about: a calendar with nothing free, and a
+            // calendar we couldn't reach. An unwired `unavailable` would
+            // be a dead line on the day the provider has an outage.
+            Node::Book { .. } => vec![
+                "booked".into(),
+                "no_slots".into(),
+                "no_input".into(),
+                "unavailable".into(),
+            ],
             Node::Message { .. } | Node::Transfer { .. } | Node::Hangup { .. } => Vec::new(),
         }
     }
@@ -73,10 +84,51 @@ impl Node {
             | Node::Ring { exits, .. }
             | Node::Message { exits, .. }
             | Node::Transfer { exits, .. }
-            | Node::Hangup { exits, .. } => exits,
+            | Node::Hangup { exits, .. }
+            | Node::Book { exits, .. } => exits,
         };
         exits.as_deref()
     }
+
+    /// The prompts this node speaks. Most kinds have one; `book` has two
+    /// (its intro and its confirmation) and `hangup`'s is optional. Twin:
+    /// `model.ts` `nodePrompts`.
+    pub fn prompts(&self) -> Vec<&Prompt> {
+        match self {
+            Node::Greeting { prompt, .. }
+            | Node::Menu { prompt, .. }
+            | Node::Message { prompt, .. } => vec![prompt],
+            Node::Hangup { prompt, .. } => prompt.iter().collect(),
+            Node::Book {
+                prompt,
+                confirm_prompt,
+                ..
+            } => vec![prompt, confirm_prompt],
+            Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
+        }
+    }
+}
+
+/// Every audio asset the flow needs on the device, sorted and unique:
+/// the refs its prompts point at, plus — for a `book` node — the
+/// vocabulary it speaks times with (see [`crate::book`], which explains
+/// why that is an asset and not a sentence).
+///
+/// "Needs on the device", not "is written in the document": the daemon
+/// asks this to decide whether a flow can be armed yet, and a `book`
+/// flow whose vocabulary hasn't synced can no more run than one whose
+/// greeting hasn't. Twin: `model.ts` `requiredAssets`.
+pub fn required_assets(flow: &Flow) -> Vec<String> {
+    let mut refs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for node in flow.nodes.values() {
+        for prompt in node.prompts() {
+            if let Prompt::Audio { audio, .. } = prompt {
+                refs.insert(audio.clone());
+            }
+        }
+        refs.extend(crate::book::vocabulary_refs(node));
+    }
+    refs.into_iter().collect()
 }
 
 impl Prompt {

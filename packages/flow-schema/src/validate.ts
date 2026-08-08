@@ -12,8 +12,9 @@
 // and menu/hours sanity caps. All problems are collected (not
 // fail-fast) so the editor can show every one at once.
 
-import type { Flow, Prompt } from './model.js';
+import type { BookNode, ComponentKind, Flow, Prompt } from './model.js';
 import {
+  KIND_MIN_SCHEMA_VERSION,
   MAX_PROMPT_CHARS,
   SUPPORTED_SCHEMA_VERSIONS,
   VALID_DIGITS,
@@ -21,6 +22,20 @@ import {
   promptText,
   requiredExits,
 } from './model.js';
+import {
+  DEFAULT_BOOK_BUFFER_MINS,
+  DEFAULT_BOOK_HORIZON_DAYS,
+  DEFAULT_BOOK_LEAD_MINS,
+  DEFAULT_BOOK_MAX_OFFERS,
+  MAX_BOOK_BUFFER_MINS,
+  MAX_BOOK_DURATION_MINS,
+  MAX_BOOK_HORIZON_DAYS,
+  MAX_BOOK_LEAD_MINS,
+  MAX_BOOK_OFFERS,
+  MIN_BOOK_DURATION_MINS,
+  bookVocabularyRefs,
+  parseBookVocabularyRef,
+} from './book.js';
 import type { Issue } from './issues.js';
 import { validateHours } from './hours.js';
 
@@ -151,8 +166,34 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
       case 'hangup':
         if (node.prompt !== undefined) checkPrompt(id, node.prompt, issues, at);
         break;
+      case 'book':
+        checkPrompt(id, node.prompt, issues, at);
+        checkPrompt(id, node.confirm_prompt, issues, at);
+        issues.push(
+          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map((issue) => ({
+            ...issue,
+            range: nodeRanges[id],
+          })),
+        );
+        checkBookBounds(id, node, issues, at);
+        break;
       case 'ring':
         break;
+    }
+
+    // A component the document's own version doesn't have. Checked per
+    // node rather than once per flow so the editor points at the step
+    // that has to change, and separate from `unknown_kind` (which a
+    // build that predates the component reports for the same document)
+    // because the fix is different: bump the version, not fix the typo.
+    const minVersion = KIND_MIN_SCHEMA_VERSION[node.kind as ComponentKind];
+    if (minVersion !== undefined && flow.schema_version < minVersion) {
+      issues.push({
+        ...at(id),
+        code: 'kind_requires_newer_schema',
+        message: `node "${id}" is a ${node.kind} step, which needs schema_version ${minVersion} (this document declares ${flow.schema_version})`,
+        params: { kind: node.kind, required: minVersion, declared: flow.schema_version },
+      });
     }
   }
 
@@ -160,6 +201,52 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
   if (entryExists) checkGraph(flow, issues, at);
 
   return issues;
+}
+
+/**
+ * The `book` node's numeric bounds, and the one structural question a
+ * schedule can fail: whether it leaves room for a single appointment.
+ *
+ * A node that can never offer anything is worth an error rather than a
+ * shrug — "we're open 9:00 to 9:30 and appointments run an hour" is a
+ * flow whose every caller falls out the `no_slots` exit, and the author
+ * will read that as a broken calendar connection, not as arithmetic.
+ * `bookVocabularyRefs` answers it for free: no time refs, no times.
+ */
+function checkBookBounds(
+  id: string,
+  node: BookNode,
+  issues: Issue[],
+  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+): void {
+  const range = (field: string, value: number, min: number, max: number): void => {
+    if (value < min || value > max) {
+      issues.push({
+        ...at(id),
+        code: 'book_out_of_range',
+        message: `book node "${id}" ${field} is ${value} (allowed: ${min}–${max})`,
+        params: { field, value, min, max },
+      });
+    }
+  };
+
+  range('duration_mins', node.duration_mins, MIN_BOOK_DURATION_MINS, MAX_BOOK_DURATION_MINS);
+  range('buffer_mins', node.buffer_mins ?? DEFAULT_BOOK_BUFFER_MINS, 0, MAX_BOOK_BUFFER_MINS);
+  range('lead_mins', node.lead_mins ?? DEFAULT_BOOK_LEAD_MINS, 0, MAX_BOOK_LEAD_MINS);
+  range('horizon_days', node.horizon_days ?? DEFAULT_BOOK_HORIZON_DAYS, 1, MAX_BOOK_HORIZON_DAYS);
+  range('max_offers', node.max_offers ?? DEFAULT_BOOK_MAX_OFFERS, 1, MAX_BOOK_OFFERS);
+
+  const speaksATime = bookVocabularyRefs(node).some(
+    (ref) => parseBookVocabularyRef(ref)?.kind === 'time',
+  );
+  if (!speaksATime) {
+    issues.push({
+      ...at(id),
+      code: 'book_never_open',
+      message: `book node "${id}" can never offer an appointment: no opening leaves room for ${node.duration_mins} minutes`,
+      params: { duration: node.duration_mins },
+    });
+  }
 }
 
 function checkPrompt(

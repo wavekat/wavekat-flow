@@ -21,10 +21,12 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
+use crate::book;
 use crate::hours::{self, HoursError};
-use crate::model::{Flow, MessageTone, Node, Prompt};
+use crate::model::{Flow, HoursException, MessageTone, Node, Prompt, WeeklySchedule};
 use crate::trace::{FlowOutcome, StepDetail, Trace};
 use crate::NodeId;
 
@@ -72,6 +74,56 @@ impl Digit {
     }
 }
 
+/// What a `book` node needs to know to ask "when is this business free?"
+/// — its own config, nothing about the caller and nothing about which
+/// calendar answers. Borrowed from the node, so the engine copies no
+/// schedules around.
+#[derive(Debug, Clone, Copy)]
+pub struct SlotQuery<'a> {
+    pub schedule: &'a WeeklySchedule,
+    pub timezone: &'a str,
+    pub exceptions: &'a [HoursException],
+    pub duration_mins: u64,
+    pub buffer_mins: u64,
+    pub lead_mins: u64,
+    pub horizon_days: u64,
+    /// How many times to ask for. The answer may be shorter, never longer.
+    pub max_offers: u64,
+}
+
+/// One offerable appointment, as absolute instants (RFC 3339). The
+/// engine never invents these and never adjusts them — it offers what it
+/// was given and hands the chosen one straight back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Slot {
+    pub start: String,
+    pub end: String,
+}
+
+/// The answer to [`FlowEffects::fetch_slots`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotOffer {
+    pub slots: Vec<Slot>,
+    /// The zone the times should be *said* in — the business's, echoed
+    /// back so the engine doesn't have to trust its own parse of the
+    /// node's config.
+    pub timezone: String,
+}
+
+/// What came of trying to book one slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BookOutcome {
+    /// It is in the calendar; the caller has an appointment.
+    Booked,
+    /// Somebody else took it between the offer and the keypress. Worth
+    /// its own answer because the caller can be offered something else,
+    /// where `Unavailable` means asking again is pointless.
+    SlotTaken,
+    /// The booking could not be attempted or did not stick — no
+    /// connection, a provider outage, a refused request.
+    Unavailable,
+}
+
 /// Result of a `ring` node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RingOutcome {
@@ -110,6 +162,25 @@ pub trait FlowEffects: Send {
 
     /// Speak an optional goodbye and end the call.
     async fn hangup(&mut self, prompt: Option<&Prompt>) -> anyhow::Result<()>;
+
+    /// Ask when the business is free, for a `book` node.
+    ///
+    /// The credential never comes near here: the impl asks the platform,
+    /// which holds the calendar connection and answers with times. An
+    /// `Err` is a transport failure — the platform unreachable, a
+    /// timeout — and routes the caller to the node's `unavailable` exit
+    /// rather than aborting the call, because unlike [`Self::speak`]
+    /// this failing says nothing about whether the caller is still
+    /// there. A working call with no calendar behind it still has a
+    /// voicemail to fall to.
+    async fn fetch_slots(&mut self, query: &SlotQuery<'_>) -> anyhow::Result<SlotOffer>;
+
+    /// Book one of the slots [`Self::fetch_slots`] returned. Idempotent
+    /// per call as far as the engine is concerned — it asks at most
+    /// twice per node, and never for two different slots at once.
+    /// `Err` is treated as [`BookOutcome::Unavailable`], for the same
+    /// reason as above.
+    async fn book_slot(&mut self, slot: &Slot) -> anyhow::Result<BookOutcome>;
 
     /// The current instant, for `hours` evaluation. Injectable so tests pin a
     /// fixed time and the schedule is deterministic.
@@ -307,7 +378,225 @@ async fn run_node<E: FlowEffects>(
             trace.push(id, kind, StepDetail::HungUp);
             Ok(Step::End(FlowOutcome::HungUp))
         }
+
+        Node::Book { .. } => run_book(id, node, fx, trace).await,
     }
+}
+
+/// The `book` node: offer open times, take a keypress, book it.
+///
+/// Four ways out, and the shape of the code is mostly about keeping
+/// three of them from turning into a dropped call. Nothing here retries
+/// a provider or waits on a queue — there is a person on the line, so
+/// every failure resolves to an exit the author wired.
+async fn run_book<E: FlowEffects>(
+    id: &NodeId,
+    node: &Node,
+    fx: &mut E,
+    trace: &mut Trace,
+) -> Result<Step, EngineError> {
+    let Node::Book {
+        prompt,
+        confirm_prompt,
+        schedule,
+        timezone,
+        exceptions,
+        duration_mins,
+        buffer_mins,
+        lead_mins,
+        horizon_days,
+        max_offers,
+        retries,
+        timeout_secs,
+        ..
+    } = node
+    else {
+        // Unreachable: the caller matched on the variant.
+        return Err(EngineError::UnknownNode(id.clone()));
+    };
+
+    let query = SlotQuery {
+        schedule,
+        timezone,
+        exceptions,
+        duration_mins: *duration_mins,
+        buffer_mins: *buffer_mins,
+        lead_mins: *lead_mins,
+        horizon_days: *horizon_days,
+        max_offers: *max_offers,
+    };
+
+    // The one thing a slot must be able to do is be *said*. The
+    // vocabulary was rendered from this node's own schedule at publish,
+    // so a time outside it has no clip — offering it would play the key
+    // to press after a silence where the time should be. Dropping it is
+    // the honest degradation, and it keeps a schedule edited after
+    // publish from producing a mute offer.
+    let sayable = book::vocabulary_refs(node);
+
+    // At most two rounds: the caller's chosen slot can be taken out from
+    // under them once and still leave something to offer; a second miss
+    // means the calendar is busier than this conversation can keep up
+    // with, and pretending otherwise just keeps them on the phone.
+    for round in 0..2u8 {
+        let offer = match fx.fetch_slots(&query).await {
+            Ok(offer) => offer,
+            Err(_) => {
+                trace.push(id, "book", StepDetail::BookUnavailable);
+                return goto(id, node, "unavailable");
+            }
+        };
+
+        let tz = match crate::hours::resolve_tz(&offer.timezone) {
+            Ok(tz) => tz,
+            // A zone name neither side can resolve. Validation rejects
+            // this at publish, so reaching it means the two disagree —
+            // which is a defect, not something to guess a zone for.
+            Err(_) => {
+                trace.push(id, "book", StepDetail::BookUnavailable);
+                return goto(id, node, "unavailable");
+            }
+        };
+
+        let now = fx.now();
+        let offered: Vec<(Slot, Vec<String>)> = offer
+            .slots
+            .iter()
+            .filter_map(|slot| {
+                let start = OffsetDateTime::parse(&slot.start, &Rfc3339).ok()?;
+                Some((slot.clone(), book::time_refs(start, now, tz)))
+            })
+            .filter(|(_, refs)| refs.iter().all(|r| sayable.contains(r)))
+            .take(usize::try_from(*max_offers).unwrap_or(usize::MAX))
+            .collect();
+
+        if offered.is_empty() {
+            trace.push(id, "book", StepDetail::BookNoSlots);
+            return goto(id, node, "no_slots");
+        }
+        trace.push(
+            id,
+            "book",
+            StepDetail::BookOffered {
+                count: offered.len() as u64,
+            },
+        );
+
+        let chosen = match collect_offer_choice(
+            fx,
+            prompt,
+            &offered,
+            *retries,
+            Duration::from_secs(*timeout_secs),
+        )
+        .await?
+        {
+            Some(index) => &offered[index].0,
+            None => {
+                trace.push(id, "book", StepDetail::BookNoInput);
+                return goto(id, node, "no_input");
+            }
+        };
+
+        match fx.book_slot(chosen).await {
+            Ok(BookOutcome::Booked) => {
+                // "You're booked for" → "Tuesday" → "ten thirty a.m." The
+                // confirmation is a prompt and the time is clips, which is
+                // why the prompt takes no placeholder (see the schema).
+                fx.speak(confirm_prompt)
+                    .await
+                    .map_err(EngineError::Effect)?;
+                let start = OffsetDateTime::parse(&chosen.start, &Rfc3339)
+                    .map_err(|_| EngineError::UnknownNode(id.clone()))?;
+                for reference in book::time_refs(start, now, tz) {
+                    fx.speak(&Prompt::Audio {
+                        audio: reference,
+                        transcript: None,
+                    })
+                    .await
+                    .map_err(EngineError::Effect)?;
+                }
+                trace.push(
+                    id,
+                    "book",
+                    StepDetail::Booked {
+                        start: chosen.start.clone(),
+                    },
+                );
+                return goto(id, node, "booked");
+            }
+            Ok(BookOutcome::SlotTaken) => {
+                trace.push(id, "book", StepDetail::BookSlotTaken);
+                fx.speak(&Prompt::Audio {
+                    audio: book::taken_ref(),
+                    transcript: None,
+                })
+                .await
+                .map_err(EngineError::Effect)?;
+                if round == 1 {
+                    trace.push(id, "book", StepDetail::BookNoSlots);
+                    return goto(id, node, "no_slots");
+                }
+                // Round two re-reads the calendar rather than re-offering
+                // the stale list: whatever took this slot may have taken
+                // another.
+            }
+            Ok(BookOutcome::Unavailable) | Err(_) => {
+                trace.push(id, "book", StepDetail::BookUnavailable);
+                return goto(id, node, "unavailable");
+            }
+        }
+    }
+
+    trace.push(id, "book", StepDetail::BookNoSlots);
+    goto(id, node, "no_slots")
+}
+
+/// Speak the intro and the offers, then wait for a key. Returns the
+/// index of the offer the caller took, or `None` when the attempts ran
+/// out. Unmapped keys and silence both simply cost an attempt — `book`
+/// has no `invalid` exit, because "you pressed 7" and "you pressed
+/// nothing" want the same thing from the flow: ask again, then move on.
+async fn collect_offer_choice<E: FlowEffects>(
+    fx: &mut E,
+    prompt: &Prompt,
+    offered: &[(Slot, Vec<String>)],
+    retries: u64,
+    timeout: Duration,
+) -> Result<Option<usize>, EngineError> {
+    for _ in 0..retries.saturating_add(1) {
+        fx.speak(prompt).await.map_err(EngineError::Effect)?;
+        for (index, (_, refs)) in offered.iter().enumerate() {
+            for reference in refs
+                .iter()
+                .cloned()
+                .chain(std::iter::once(book::press_ref(index as u64 + 1)))
+            {
+                fx.speak(&Prompt::Audio {
+                    audio: reference,
+                    transcript: None,
+                })
+                .await
+                .map_err(EngineError::Effect)?;
+            }
+        }
+
+        let pressed = fx
+            .collect_digit(timeout)
+            .await
+            .map_err(EngineError::Effect)?;
+        if let Some(digit) = pressed {
+            if let Some(index) = digit
+                .as_key()
+                .parse::<usize>()
+                .ok()
+                .filter(|d| *d >= 1 && *d <= offered.len())
+            {
+                return Ok(Some(index - 1));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// The menu retry loop. Speak, collect a digit, repeat up to `retries + 1`
@@ -401,6 +690,14 @@ mod tests {
         /// Every node the engine entered, in visit order (id, kind) — the
         /// live-position signal `on_enter` feeds.
         entered: Vec<(String, &'static str)>,
+        /// Scripted answers for `book`, consumed in order. An exhausted
+        /// queue answers the way an unreachable platform does, which is
+        /// what a test that forgot to script one should see.
+        slot_answers: VecDeque<anyhow::Result<SlotOffer>>,
+        book_answers: VecDeque<anyhow::Result<BookOutcome>>,
+        /// Observed: what was asked for, and what was taken.
+        slot_queries: u32,
+        booked: Vec<Slot>,
     }
 
     impl MockEffects {
@@ -417,7 +714,25 @@ mod tests {
                 hung_up: false,
                 fail_speak: false,
                 entered: Vec::new(),
+                slot_answers: VecDeque::new(),
+                book_answers: VecDeque::new(),
+                slot_queries: 0,
+                booked: Vec::new(),
             }
+        }
+        fn slot_answers(
+            mut self,
+            seq: impl IntoIterator<Item = anyhow::Result<SlotOffer>>,
+        ) -> Self {
+            self.slot_answers = seq.into_iter().collect();
+            self
+        }
+        fn book_answers(
+            mut self,
+            seq: impl IntoIterator<Item = anyhow::Result<BookOutcome>>,
+        ) -> Self {
+            self.book_answers = seq.into_iter().collect();
+            self
         }
         fn digits(mut self, seq: impl IntoIterator<Item = Option<Digit>>) -> Self {
             self.digits = seq.into_iter().collect();
@@ -433,10 +748,13 @@ mod tests {
         }
     }
 
+    /// What the caller heard, as a string a test can assert on. An audio
+    /// prompt reports its ref: for `book` that *is* the content — the
+    /// clips are the words.
     fn prompt_label(p: &Prompt) -> String {
-        match p.as_text() {
-            Some(t) => t.to_string(),
-            None => "<audio>".to_string(),
+        match p {
+            Prompt::Text(t) => t.clone(),
+            Prompt::Audio { audio, .. } => audio.clone(),
         }
     }
 
@@ -475,6 +793,18 @@ mod tests {
             }
             self.hung_up = true;
             Ok(())
+        }
+        async fn fetch_slots(&mut self, _query: &SlotQuery<'_>) -> anyhow::Result<SlotOffer> {
+            self.slot_queries += 1;
+            self.slot_answers
+                .pop_front()
+                .unwrap_or_else(|| anyhow::bail!("no slot answer scripted"))
+        }
+        async fn book_slot(&mut self, slot: &Slot) -> anyhow::Result<BookOutcome> {
+            self.booked.push(slot.clone());
+            self.book_answers
+                .pop_front()
+                .unwrap_or_else(|| anyhow::bail!("no book answer scripted"))
         }
         fn now(&self) -> OffsetDateTime {
             self.now
@@ -736,6 +1066,228 @@ nodes:
         assert!(trace.error.as_deref().unwrap().contains("caller hung up"));
         // Nothing was appended — it failed on the first node's effect.
         assert!(trace.steps.is_empty());
+    }
+
+    // ── `book` (schema_version 2) ────────────────────────────────────────
+    //
+    // The scenarios that matter are the ones where nothing goes right:
+    // three of `book`'s four exits exist because a calendar can fail, and
+    // each of them has to end with the caller somewhere sensible rather
+    // than listening to silence.
+
+    const CLINIC: &str = r#"
+schema_version: 2
+id: flow_clinic
+name: The clinic
+entry: take_booking
+nodes:
+  take_booking:
+    kind: book
+    prompt: I can book you in. Here are the next available times.
+    confirm_prompt: You're booked for
+    timezone: UTC
+    schedule:
+      tue: [{ open: "09:00", close: "12:00" }]
+    duration_mins: 30
+    max_offers: 2
+    retries: 1
+    timeout_secs: 5
+    exits:
+      booked: goodbye
+      no_slots: voicemail
+      no_input: voicemail
+      unavailable: voicemail
+  goodbye:
+    kind: hangup
+    prompt: See you then.
+  voicemail:
+    kind: message
+    prompt: Leave your name and number.
+"#;
+
+    fn clinic() -> Flow {
+        let flow = Flow::from_yaml(CLINIC).expect("parses");
+        validate(&flow).expect("the scenario flow must be valid");
+        flow
+    }
+
+    fn slot(start: &str, end: &str) -> Slot {
+        Slot {
+            start: start.to_string(),
+            end: end.to_string(),
+        }
+    }
+
+    /// Two Tuesday-morning slots, in the vocabulary the CLINIC schedule
+    /// renders (09:00–11:30 on the quarter hour).
+    fn two_slots() -> SlotOffer {
+        SlotOffer {
+            slots: vec![
+                slot("2026-07-07T09:00:00Z", "2026-07-07T09:30:00Z"),
+                slot("2026-07-07T10:30:00Z", "2026-07-07T11:00:00Z"),
+            ],
+            timezone: "UTC".to_string(),
+        }
+    }
+
+    // The Monday before those slots: they are "tomorrow", not "Tuesday".
+    fn day_before() -> OffsetDateTime {
+        datetime!(2026-07-06 12:00 UTC)
+    }
+
+    #[tokio::test]
+    async fn book_offers_times_and_confirms_the_one_taken() {
+        let mut fx = MockEffects::new(day_before())
+            .slot_answers([Ok(two_slots())])
+            .book_answers([Ok(BookOutcome::Booked)])
+            .digits([Some(Digit::D2)]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        // The caller heard the intro, then each time with its key, then
+        // the confirmation followed by the time they actually got.
+        assert_eq!(
+            fx.spoken,
+            vec![
+                "I can book you in. Here are the next available times.",
+                "bkday_tomorrow",
+                "bktime_0900",
+                "bkpress_1",
+                "bkday_tomorrow",
+                "bktime_1030",
+                "bkpress_2",
+                "You're booked for",
+                "bkday_tomorrow",
+                "bktime_1030",
+                "See you then.",
+            ],
+        );
+        // The second offer is what was booked — the digit maps by
+        // position, not by any id in the payload.
+        assert_eq!(fx.booked, vec![two_slots().slots[1].clone()]);
+        assert_eq!(trace.steps[0].detail, StepDetail::BookOffered { count: 2 });
+        assert_eq!(
+            trace.steps[1].detail,
+            StepDetail::Booked {
+                start: "2026-07-07T10:30:00Z".into()
+            }
+        );
+        assert_eq!(trace.outcome, FlowOutcome::HungUp);
+        assert!(trace.is_clean());
+    }
+
+    #[tokio::test]
+    async fn an_empty_calendar_takes_the_no_slots_exit() {
+        let mut fx = MockEffects::new(day_before()).slot_answers([Ok(SlotOffer {
+            slots: Vec::new(),
+            timezone: "UTC".to_string(),
+        })]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        assert_eq!(trace.steps[0].detail, StepDetail::BookNoSlots);
+        assert_eq!(trace.outcome, FlowOutcome::MessageLeft);
+        // Nothing was offered, so nothing was booked and no key was asked
+        // for — the caller goes straight to voicemail.
+        assert!(fx.booked.is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_platform_takes_the_unavailable_exit() {
+        // The `book` effects failing is NOT the call failing: the caller
+        // is still on the line and must land on voicemail, not on a
+        // dropped call with an aborted trace.
+        let mut fx = MockEffects::new(day_before())
+            .slot_answers([Err(anyhow::anyhow!("connect timed out"))]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        assert_eq!(trace.steps[0].detail, StepDetail::BookUnavailable);
+        assert_eq!(trace.outcome, FlowOutcome::MessageLeft);
+        assert!(trace.is_clean(), "a calendar outage is not an aborted call");
+    }
+
+    #[tokio::test]
+    async fn a_slot_taken_mid_call_is_re_read_and_re_offered_once() {
+        // First choice is gone; the second read is a fresh one (whatever
+        // took that slot may have taken another), and the caller gets
+        // what they pick from it.
+        let second_read = SlotOffer {
+            slots: vec![slot("2026-07-07T11:00:00Z", "2026-07-07T11:30:00Z")],
+            timezone: "UTC".to_string(),
+        };
+        let mut fx = MockEffects::new(day_before())
+            .slot_answers([Ok(two_slots()), Ok(second_read)])
+            .book_answers([Ok(BookOutcome::SlotTaken), Ok(BookOutcome::Booked)])
+            .digits([Some(Digit::D1), Some(Digit::D1)]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        assert_eq!(fx.slot_queries, 2, "the calendar is re-read, not replayed");
+        assert!(fx.spoken.contains(&"bktaken".to_string()));
+        assert_eq!(trace.steps[1].detail, StepDetail::BookSlotTaken);
+        assert_eq!(
+            trace.steps[3].detail,
+            StepDetail::Booked {
+                start: "2026-07-07T11:00:00Z".into()
+            }
+        );
+        assert_eq!(trace.outcome, FlowOutcome::HungUp);
+    }
+
+    #[tokio::test]
+    async fn losing_the_race_twice_gives_up_rather_than_looping() {
+        let mut fx = MockEffects::new(day_before())
+            .slot_answers([Ok(two_slots()), Ok(two_slots())])
+            .book_answers([Ok(BookOutcome::SlotTaken), Ok(BookOutcome::SlotTaken)])
+            .digits([Some(Digit::D1), Some(Digit::D1)]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        assert_eq!(fx.slot_queries, 2, "two rounds, then the exit");
+        assert_eq!(trace.outcome, FlowOutcome::MessageLeft);
+        assert!(trace
+            .steps
+            .iter()
+            .any(|s| s.detail == StepDetail::BookNoSlots));
+    }
+
+    #[tokio::test]
+    async fn silence_and_unmapped_keys_both_end_at_no_input() {
+        // retries: 1 → two attempts. An out-of-range key costs an attempt
+        // exactly as silence does: `book` has no `invalid` exit, because
+        // both want the same thing from the flow.
+        let mut fx = MockEffects::new(day_before())
+            .slot_answers([Ok(two_slots())])
+            .digits([Some(Digit::D7), None]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        assert_eq!(trace.steps[1].detail, StepDetail::BookNoInput);
+        assert_eq!(trace.outcome, FlowOutcome::MessageLeft);
+        assert!(fx.booked.is_empty());
+        // The offers were spoken once per attempt.
+        assert_eq!(fx.spoken.iter().filter(|s| *s == "bktime_0900").count(), 2,);
+    }
+
+    #[tokio::test]
+    async fn a_time_the_vocabulary_cannot_say_is_never_offered() {
+        // 13:00 is outside the node's own schedule, so no clip for it was
+        // ever rendered. Offering it would play "press one" after a
+        // silence; dropping it is the honest degradation.
+        let mut fx = MockEffects::new(day_before())
+            .slot_answers([Ok(SlotOffer {
+                slots: vec![
+                    slot("2026-07-07T13:00:00Z", "2026-07-07T13:30:00Z"),
+                    slot("2026-07-07T09:00:00Z", "2026-07-07T09:30:00Z"),
+                ],
+                timezone: "UTC".to_string(),
+            })])
+            .book_answers([Ok(BookOutcome::Booked)])
+            .digits([Some(Digit::D1)]);
+        let trace = run_trace(&clinic(), &mut fx).await;
+
+        assert_eq!(
+            trace.steps[0].detail,
+            StepDetail::BookOffered { count: 1 },
+            "only the sayable slot survived"
+        );
+        assert!(!fx.spoken.iter().any(|s| s == "bktime_1300"));
+        assert_eq!(fx.booked, vec![two_slots().slots[0].clone()]);
     }
 
     #[tokio::test]

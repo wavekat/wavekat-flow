@@ -178,6 +178,13 @@ Trigger: the format is stable enough and the repo is ready to be public.
 - [ ] Should the model **helpers** (`requiredExits`, `isTerminal`, …) be
       generated (via a schema extension / annotations) or stay hand-written
       twins? Leaning hand-written — they're small and are logic, not shape.
-- [ ] `schema_version` 2 planning: the `assistant` node (doc 48 M3) will be the
-      first additive bump — it lands as `schema/flow.v2.schema.json` + a frozen
-      `conformance/v2/`, with v1 untouched.
+- [x] `schema_version` 2 planning. Answered by shipping it: the first additive
+      bump turned out to be **`book`** (phone appointment booking), not the
+      `assistant` node — `schema/flow.v2.schema.json` + a frozen
+      `conformance/v2/`, v1 untouched, both languages advertising `[1, 2]`.
+      The pattern it established, for `assistant` to follow: types generate
+      from the newest schema only (one model, every version), structural
+      validation dispatches on the document's declared version, and a
+      per-kind minimum version in both validators is what tells an author
+      "bump the version" instead of "fix the typo". `assistant` becomes
+      version 3.

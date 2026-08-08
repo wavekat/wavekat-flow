@@ -9,11 +9,11 @@
 
 The call-flow ("Receptionist") document model for the
 [WaveKat](https://wavekat.com) voice platform: the declarative IVR document —
-greeting, hours check, menu, voicemail, transfer — that WaveKat voice lines
+greeting, hours check, menu, voicemail, transfer, phone booking — that WaveKat voice lines
 run.
 
 The model types are **generated at build time** from the normative JSON
-Schema (`schema/flow.v1.schema.json`), the single source of truth shared with
+Schema (`schema/flow.vN.schema.json`), the single source of truth shared with
 the [`@wavekat/flow-schema`](https://www.npmjs.com/package/@wavekat/flow-schema)
 npm package. Both languages run the same
 [conformance corpus](https://github.com/wavekat/wavekat-flow/tree/main/conformance),

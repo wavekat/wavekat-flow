@@ -1,0 +1,5 @@
+{
+  "description": "The bounds live in the validator rather than the schema (see CLAUDE.md: the schema owns shape only), so a structurally fine document can still ask for more offers than a caller can hold in their head — or than the vocabulary has keypad digits for.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["book_out_of_range"] }
+}

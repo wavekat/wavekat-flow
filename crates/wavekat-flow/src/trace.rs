@@ -109,6 +109,19 @@ pub enum StepDetail {
     Transferred { target: String },
     /// The flow spoke an optional goodbye and hung up.
     HungUp,
+    /// A `book` node read the calendar and offered this many times.
+    BookOffered { count: u64 },
+    /// A `book` node put the caller in the calendar (RFC 3339 start).
+    Booked { start: String },
+    /// The time the caller chose was gone by the time they pressed a key.
+    BookSlotTaken,
+    /// A `book` node had nothing to offer — an empty calendar window, or
+    /// a second slot lost to somebody else mid-conversation.
+    BookNoSlots,
+    /// A `book` node offered times and heard nothing usable back.
+    BookNoInput,
+    /// A `book` node could not reach the calendar at all.
+    BookUnavailable,
 }
 
 /// How a run ended — the call disposition ("Answered by your receptionist",

@@ -7,10 +7,12 @@
 // (helpers) and `validate.rs` / `lib.rs` (the shared constants). When you
 // change anything here, update the Rust side to match.
 
-import type { Flow, MessageTone, Node, Prompt } from './generated/model.js';
+import type { BookNode, Flow, MessageTone, Node, Prompt } from './generated/model.js';
+import { bookVocabularyRefs } from './book.js';
 
 // ── Re-exported generated types (the public shape) ───────────────────────
 export type {
+  BookNode,
   Exits,
   Flow,
   GreetingNode,
@@ -50,7 +52,13 @@ export type Component = Node;
 
 /** Schema versions this validator understands. Twin: `lib.rs`
  * `SUPPORTED_SCHEMA_VERSIONS`. */
-export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1];
+export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2];
+
+/** The newest version this build authors — what a new document should
+ * declare. Reading stays broad ({@link SUPPORTED_SCHEMA_VERSIONS});
+ * writing is deliberately one number. Twin: `lib.rs`
+ * `CURRENT_SCHEMA_VERSION`. */
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
  * `validate.rs` `MAX_PROMPT_CHARS`. */
@@ -84,8 +92,32 @@ export const COMPONENT_KINDS = [
   'message',
   'transfer',
   'hangup',
+  'book',
 ] as const;
 export type ComponentKind = (typeof COMPONENT_KINDS)[number];
+
+/**
+ * The oldest `schema_version` that may carry each component — the whole
+ * of what "a version bump" means in this format, since versions grow by
+ * gaining components and nothing else so far.
+ *
+ * A record rather than a list of new kinds per version: adding a kind is
+ * then one entry the compiler demands, and the check reads as a
+ * comparison instead of a search. Documents are never rewritten, so a
+ * v1 flow keeps working forever — it simply may not use `book`.
+ *
+ * Twin: `validate.rs` `kind_min_schema_version`.
+ */
+export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
+  greeting: 1,
+  hours: 1,
+  menu: 1,
+  ring: 1,
+  message: 1,
+  transfer: 1,
+  hangup: 1,
+  book: 2,
+};
 
 /**
  * What a `message` node plays between its prompt and the start of
@@ -98,6 +130,11 @@ export const DEFAULT_MENU_RETRIES = 1;
 export const DEFAULT_MENU_TIMEOUT_SECS = 5;
 export const DEFAULT_MESSAGE_MAX_SECS = 120;
 export const DEFAULT_MESSAGE_TONE: MessageTone = 'beep';
+
+// The `book` component's constants and its spoken-time vocabulary live
+// in `./book.ts` — one file per language for the whole component, so the
+// TS/Rust pair stays easy to diff (`book.rs`). They are re-exported from
+// the package barrel alongside these.
 
 // ── Helpers (logic layered on the generated types) ───────────────────────
 
@@ -125,6 +162,12 @@ export function requiredExits(node: Node): string[] {
       return [...Object.keys(node.options), 'no_input', 'invalid'];
     case 'ring':
       return ['no_answer'];
+    // Every way out of `book` is wired, including the two nobody wants
+    // to think about: a calendar with nothing free, and a calendar we
+    // couldn't reach. An unwired `unavailable` would be a dead line on
+    // the day Google has an outage.
+    case 'book':
+      return ['booked', 'no_slots', 'no_input', 'unavailable'];
     case 'message':
     case 'transfer':
     case 'hangup':
@@ -177,26 +220,43 @@ export function isGeneratedClipRef(ref: string): boolean {
   return GENERATED_CLIP_RE.test(ref);
 }
 
-function nodePrompt(node: Node): Prompt | undefined {
+/** The prompts a node speaks. Most kinds have one; `book` has two (its
+ * intro and its confirmation), and `hangup`'s is optional. */
+export function nodePrompts(node: Node): Prompt[] {
   switch (node.kind) {
     case 'greeting':
     case 'menu':
     case 'message':
+      return [node.prompt];
     case 'hangup':
-      return node.prompt;
+      return node.prompt === undefined ? [] : [node.prompt];
+    case 'book':
+      return [node.prompt, node.confirm_prompt];
     default:
-      return undefined;
+      return [];
   }
 }
 
-/** Every audio asset ref the flow's prompts reference, sorted, unique. */
+/**
+ * Every audio asset the flow needs on the device, sorted and unique:
+ * the refs its prompts point at, plus — for a `book` node — the
+ * vocabulary it speaks times with (see `book.ts`, which explains why
+ * that is an asset and not a sentence).
+ *
+ * "Needs on the device", not "is written in the document": the daemon
+ * asks this to decide whether a flow can be armed yet, and a `book`
+ * flow whose vocabulary hasn't synced can no more run than one whose
+ * greeting hasn't.
+ */
 export function requiredAssets(flow: Flow): string[] {
   const refs = new Set<string>();
   for (const node of Object.values(flow.nodes)) {
-    const prompt = nodePrompt(node);
-    if (prompt !== undefined) {
+    for (const prompt of nodePrompts(node)) {
       const audio = promptAudio(prompt);
       if (audio !== null) refs.add(audio);
+    }
+    if (node.kind === 'book') {
+      for (const ref of bookVocabularyRefs(node)) refs.add(ref);
     }
   }
   return [...refs].sort();

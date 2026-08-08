@@ -292,5 +292,24 @@ export function defaultNode(kind: ComponentKind): Record<string, unknown> {
       return { kind, target: '' };
     case 'hangup':
       return { kind };
+    // Opens with a plausible working week rather than an empty schedule:
+    // `book`'s empty state is a node that can never offer anything, and
+    // an author who has just added a booking step should hear the
+    // validator complain about wiring, not about arithmetic.
+    case 'book':
+      return {
+        kind,
+        prompt: 'I can book you in. Here are the next available times.',
+        confirm_prompt: "You're booked for",
+        timezone: 'UTC',
+        schedule: {
+          mon: [{ open: '09:00', close: '17:00' }],
+          tue: [{ open: '09:00', close: '17:00' }],
+          wed: [{ open: '09:00', close: '17:00' }],
+          thu: [{ open: '09:00', close: '17:00' }],
+          fri: [{ open: '09:00', close: '17:00' }],
+        },
+        duration_mins: 30,
+      };
   }
 }

@@ -1,0 +1,5 @@
+{
+  "description": "The worked `book` example: a full booking flow with split opening hours, holiday exceptions, a buffer, and all four exits wired — the two failure exits both landing on voicemail, which is the pattern that keeps a calendar outage from becoming a dead line.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

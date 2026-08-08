@@ -14,6 +14,7 @@
 
 use std::collections::{BTreeSet, VecDeque};
 
+use crate::book::{self};
 use crate::hours::{self, HoursError};
 use crate::model::{Flow, Node, Prompt};
 use crate::model_ext::NodeId;
@@ -83,6 +84,30 @@ pub enum ValidationError {
 
     #[error("node {node:?} can never reach a way to end the call (caller trapped)")]
     Trapped { node: NodeId },
+
+    #[error("book node {node:?} {field} is {value} (allowed: {min}–{max})")]
+    BookOutOfRange {
+        node: NodeId,
+        field: &'static str,
+        value: u64,
+        min: u64,
+        max: u64,
+    },
+
+    #[error(
+        "book node {node:?} can never offer an appointment: no opening leaves room for {duration} minutes"
+    )]
+    BookNeverOpen { node: NodeId, duration: u64 },
+
+    #[error(
+        "node {node:?} is a {kind} step, which needs schema_version {required} (this document declares {declared})"
+    )]
+    KindRequiresNewerSchema {
+        node: NodeId,
+        kind: &'static str,
+        required: i64,
+        declared: i64,
+    },
 }
 
 impl ValidationError {
@@ -108,7 +133,22 @@ impl ValidationError {
             ValidationError::PromptTooLong { .. } => "prompt_too_long",
             ValidationError::Unreachable { .. } => "unreachable",
             ValidationError::Trapped { .. } => "trapped",
+            ValidationError::BookOutOfRange { .. } => "book_out_of_range",
+            ValidationError::BookNeverOpen { .. } => "book_never_open",
+            ValidationError::KindRequiresNewerSchema { .. } => "kind_requires_newer_schema",
         }
+    }
+}
+
+/// The oldest `schema_version` that may carry each component — the whole
+/// of what "a version bump" means in this format, since versions grow by
+/// gaining components and nothing else so far. Documents are never
+/// rewritten, so a v1 flow keeps working forever; it simply may not use
+/// `book`. Twin: `model.ts` `KIND_MIN_SCHEMA_VERSION`.
+fn kind_min_schema_version(kind: &str) -> i64 {
+    match kind {
+        "book" => 2,
+        _ => 1,
     }
 }
 
@@ -139,6 +179,22 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
     for (id, node) in &flow.nodes {
         check_exits(id, node, flow, &mut errs);
         check_node(id, node, &mut errs);
+
+        // A component the document's own version doesn't have. Checked
+        // per node rather than once per flow so the editor points at the
+        // step that has to change, and kept separate from the parser's
+        // `unknown_kind` (which a build predating the component reports
+        // for the same document) because the fix differs: bump the
+        // version, don't fix the typo.
+        let required = kind_min_schema_version(node.kind());
+        if flow.schema_version < required {
+            errs.push(ValidationError::KindRequiresNewerSchema {
+                node: id.clone(),
+                kind: node.kind(),
+                required,
+                declared: flow.schema_version,
+            });
+        }
     }
 
     // Reachability and trap analysis need a real entry to walk from.
@@ -236,6 +292,86 @@ fn check_node(id: &NodeId, node: &Node, errs: &mut Vec<ValidationError>) {
                 check_prompt(id, p, errs);
             }
         }
+        Node::Book {
+            prompt,
+            confirm_prompt,
+            schedule,
+            timezone,
+            exceptions,
+            ..
+        } => {
+            check_prompt(id, prompt, errs);
+            check_prompt(id, confirm_prompt, errs);
+            if let Err(source) = hours::validate_config(schedule, timezone, exceptions) {
+                errs.push(ValidationError::Hours {
+                    node: id.clone(),
+                    source,
+                });
+            }
+            check_book_bounds(id, node, errs);
+        }
+    }
+}
+
+/// The `book` node's numeric bounds, and the one structural question a
+/// schedule can fail: whether it leaves room for a single appointment.
+///
+/// A node that can never offer anything is worth an error rather than a
+/// shrug — "we're open 9:00 to 9:30 and appointments run an hour" is a
+/// flow whose every caller falls out the `no_slots` exit, and the author
+/// will read that as a broken calendar connection, not as arithmetic.
+/// [`book::vocabulary_refs`] answers it for free: no time refs, no times.
+fn check_book_bounds(id: &NodeId, node: &Node, errs: &mut Vec<ValidationError>) {
+    let Node::Book {
+        duration_mins,
+        buffer_mins,
+        lead_mins,
+        horizon_days,
+        max_offers,
+        ..
+    } = node
+    else {
+        return;
+    };
+
+    let mut range = |field: &'static str, value: u64, min: u64, max: u64| {
+        if value < min || value > max {
+            errs.push(ValidationError::BookOutOfRange {
+                node: id.clone(),
+                field,
+                value,
+                min,
+                max,
+            });
+        }
+    };
+    range(
+        "duration_mins",
+        *duration_mins,
+        book::MIN_BOOK_DURATION_MINS,
+        book::MAX_BOOK_DURATION_MINS,
+    );
+    range("buffer_mins", *buffer_mins, 0, book::MAX_BOOK_BUFFER_MINS);
+    range("lead_mins", *lead_mins, 0, book::MAX_BOOK_LEAD_MINS);
+    range(
+        "horizon_days",
+        *horizon_days,
+        1,
+        book::MAX_BOOK_HORIZON_DAYS,
+    );
+    range("max_offers", *max_offers, 1, book::MAX_BOOK_OFFERS);
+
+    let speaks_a_time = book::vocabulary_refs(node).iter().any(|r| {
+        matches!(
+            book::parse_vocabulary_ref(r),
+            Some(book::VocabularyRef::Time { .. })
+        )
+    });
+    if !speaks_a_time {
+        errs.push(ValidationError::BookNeverOpen {
+            node: id.clone(),
+            duration: *duration_mins,
+        });
     }
 }
 

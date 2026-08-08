@@ -1,0 +1,5 @@
+{
+  "description": "Arithmetic, not wiring: a 60-minute appointment never fits a 30-minute opening, so this node can only ever take the no_slots exit. Caught at publish because the author would otherwise read it as a broken calendar connection.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["book_never_open"] }
+}

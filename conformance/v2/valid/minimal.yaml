@@ -1,0 +1,7 @@
+schema_version: 2
+id: flow_min2
+name: Minimal, version 2
+entry: bye
+nodes:
+  bye:
+    kind: hangup

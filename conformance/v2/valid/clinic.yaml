@@ -1,0 +1,44 @@
+schema_version: 2
+id: flow_clinic
+name: The clinic — book by phone
+version: 4
+entry: welcome
+nodes:
+  welcome:
+    kind: greeting
+    prompt: Thanks for calling the clinic.
+    exits: { next: take_booking }
+  take_booking:
+    kind: book
+    prompt: I can book you in. Here are the next available times.
+    confirm_prompt: You're booked for
+    timezone: America/New_York
+    schedule:
+      mon: [{ open: "09:00", close: "12:30" }, { open: "13:30", close: "17:00" }]
+      tue: [{ open: "09:00", close: "17:00" }]
+      wed: [{ open: "09:00", close: "17:00" }]
+      thu: [{ open: "09:00", close: "17:00" }]
+      fri: [{ open: "09:00", close: "15:00" }]
+    exceptions:
+      - date: "2026-12-25"
+        closed: true
+      - date: "2026-12-24"
+        ranges: [{ open: "09:00", close: "12:00" }]
+    duration_mins: 30
+    buffer_mins: 10
+    lead_mins: 120
+    horizon_days: 14
+    max_offers: 3
+    retries: 1
+    timeout_secs: 6
+    exits:
+      booked: goodbye
+      no_slots: voicemail
+      no_input: voicemail
+      unavailable: voicemail
+  goodbye:
+    kind: hangup
+    prompt: See you then. Goodbye.
+  voicemail:
+    kind: message
+    prompt: Leave your name and number and we'll call you back.
