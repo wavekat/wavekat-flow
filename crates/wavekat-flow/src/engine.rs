@@ -1119,7 +1119,7 @@ nodes:
     }
 
     /// Two Tuesday-morning slots, in the vocabulary the CLINIC schedule
-    /// renders (09:00–11:30 on the quarter hour).
+    /// renders (09:00–11:30 on the half hour).
     fn two_slots() -> SlotOffer {
         SlotOffer {
             slots: vec![
