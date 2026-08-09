@@ -152,6 +152,24 @@ fn kind_min_schema_version(kind: &str) -> i64 {
     }
 }
 
+/// The lowest `schema_version` that can carry this document's components —
+/// the version it *needs*, as against the one it declares.
+///
+/// The engine has no use for this; it is here for authoring tools, which
+/// set the declared version from it so the number tracks the steps the
+/// author placed rather than being one more thing they must know about.
+/// A document needing nothing newer stays at 1, which is also the widest:
+/// every engine in the field can run it.
+///
+/// Twin: `model.ts` `requiredSchemaVersion`.
+pub fn required_schema_version(flow: &Flow) -> i64 {
+    flow.nodes
+        .values()
+        .map(|node| kind_min_schema_version(node.kind()))
+        .max()
+        .unwrap_or(1)
+}
+
 /// Validate a parsed flow. `Ok(())` means safe to publish / execute; `Err`
 /// carries every problem found.
 pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
@@ -743,5 +761,52 @@ nodes:
             .unwrap_err()
             .iter()
             .any(|e| matches!(e, ValidationError::Hours { .. })));
+    }
+
+    // ── `required_schema_version` ────────────────────────────────────────
+
+    const BOOKING: &str = r#"
+schema_version: 2
+id: f
+name: n
+entry: appointment
+nodes:
+  appointment:
+    kind: book
+    prompt: When suits you?
+    confirm_prompt: You're booked for
+    timezone: UTC
+    schedule:
+      tue: [{ open: "09:00", close: "17:00" }]
+    duration_mins: 30
+    exits:
+      booked: bye
+      no_slots: bye
+      no_input: bye
+      unavailable: bye
+  bye:
+    kind: hangup
+"#;
+
+    #[test]
+    fn a_document_of_v1_components_needs_only_v1() {
+        assert_eq!(required_schema_version(&parse(LUIGIS)), 1);
+    }
+
+    #[test]
+    fn a_document_rises_to_what_its_newest_component_needs() {
+        assert_eq!(required_schema_version(&parse(BOOKING)), 2);
+    }
+
+    #[test]
+    fn a_document_with_no_steps_needs_v1() {
+        let src = r#"
+schema_version: 1
+id: f
+name: n
+entry: bye
+nodes: {}
+"#;
+        assert_eq!(required_schema_version(&parse(src)), 1);
     }
 }

@@ -103,8 +103,12 @@ export type ComponentKind = (typeof COMPONENT_KINDS)[number];
  *
  * A record rather than a list of new kinds per version: adding a kind is
  * then one entry the compiler demands, and the check reads as a
- * comparison instead of a search. Documents are never rewritten, so a
- * v1 flow keeps working forever — it simply may not use `book`.
+ * comparison instead of a search.
+ *
+ * The format never migrates a document: a v1 flow keeps working forever,
+ * it simply may not use `book`. That is a promise about *stored*
+ * documents and is not in tension with an authoring tool raising a draft
+ * it is editing — see {@link requiredSchemaVersion}.
  *
  * Twin: `validate.rs` `kind_min_schema_version`.
  */
@@ -118,6 +122,26 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
   hangup: 1,
   book: 2,
 };
+
+/**
+ * The lowest `schema_version` that can carry this document's components —
+ * the version it *needs*, as against the one it declares.
+ *
+ * For an authoring tool, this is the whole of what a version bump means:
+ * the author adds a step and the number follows, instead of becoming
+ * something they have to know about and set by hand. Pairing it with
+ * {@link setSchemaVersion} keeps a draft at the lowest version that can
+ * run it, which is also the widest — a document that needs nothing newer
+ * stays runnable by every engine in the field.
+ *
+ * The floor of 1 is load-bearing: `Math.max()` of nothing is `-Infinity`,
+ * and a document with no steps yet is exactly what a new draft is.
+ *
+ * Twin: `validate.rs` `required_schema_version`.
+ */
+export function requiredSchemaVersion(flow: Flow): number {
+  return Math.max(1, ...Object.values(flow.nodes).map((node) => KIND_MIN_SCHEMA_VERSION[node.kind]));
+}
 
 /**
  * What a `message` node plays between its prompt and the start of
