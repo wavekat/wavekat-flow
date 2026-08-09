@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.10](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.9...flow-schema-v0.0.10) (2026-08-09)
+
+
+### Features
+
+* derive and set a document's schema_version ([#41](https://github.com/wavekat/wavekat-flow/issues/41)) ([756c209](https://github.com/wavekat/wavekat-flow/commit/756c209e97553ce929787437d802330a175f65f3))
+
 ## [0.0.9](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.8...flow-schema-v0.0.9) (2026-08-08)
 
 
