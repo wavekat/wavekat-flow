@@ -21,6 +21,7 @@ import {
   setExit,
   setNodePosition,
   setNodeValue,
+  setSchemaVersion,
   stampIdentity,
 } from '../src/mutate.js';
 import { COMPONENT_KINDS } from '../src/model.js';
@@ -235,5 +236,27 @@ describe('stampIdentity', () => {
 
   it('fails cleanly on unparseable text', () => {
     expect(stampIdentity('nodes: [', { id: 'x' })).toEqual({ ok: false, error: 'parse_failed' });
+  });
+});
+
+describe('setSchemaVersion', () => {
+  it('restates the declared version, leaving the document otherwise alone', () => {
+    const source = edited(setSchemaVersion(SOURCE, 2));
+    const { flow } = checkFlow(source);
+    expect(flow?.schema_version).toBe(2);
+    expect(flow?.entry).toBe('welcome');
+    expect(source).toContain('swap this for your own greeting');
+    expect(source).toContain('ui:');
+  });
+
+  it('lowers the version as readily as it raises it', () => {
+    // An authoring tool drops a draft back to the widest version that can
+    // still run it once the component that forced the bump is removed.
+    const raised = edited(setSchemaVersion(SOURCE, 2));
+    expect(checkFlow(edited(setSchemaVersion(raised, 1))).flow?.schema_version).toBe(1);
+  });
+
+  it('fails cleanly on unparseable text', () => {
+    expect(setSchemaVersion('nodes: [', 2)).toEqual({ ok: false, error: 'parse_failed' });
   });
 });

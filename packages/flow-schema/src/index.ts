@@ -58,5 +58,6 @@ export {
   setExit,
   setNodePosition,
   setNodeValue,
+  setSchemaVersion,
   stampIdentity,
 } from './mutate.js';

@@ -270,6 +270,26 @@ export function stampIdentity(
 }
 
 /**
+ * Restate the document's declared `schema_version`.
+ *
+ * Machine-managed, like the identity fields above: an authoring tool sets
+ * it from {@link requiredSchemaVersion} so the number tracks the steps the
+ * author actually placed, rather than being a thing they have to know
+ * about. It lowers as readily as it raises — a draft that no longer needs
+ * the newer component goes back to the widest version that can run it.
+ *
+ * This does not migrate a document. Nothing here rewrites a stored flow's
+ * *contents* to suit another version; the format's promise that an old
+ * document keeps working is untouched.
+ */
+export function setSchemaVersion(source: string, version: number): EditResult {
+  return withDoc(source, (doc) => {
+    doc.set('schema_version', version);
+    return undefined;
+  });
+}
+
+/**
  * A freshly-added node's starting shape, per kind. English placeholder
  * copy — the web editor passes its own localized shape instead; this is
  * the fallback and the tests' fixture. Exits are deliberately unwired:
