@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.7](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.6...wavekat-flow-v0.0.7) (2026-08-09)
+
+
+### Features
+
+* derive and set a document's schema_version ([#41](https://github.com/wavekat/wavekat-flow/issues/41)) ([756c209](https://github.com/wavekat/wavekat-flow/commit/756c209e97553ce929787437d802330a175f65f3))
+
 ## [0.0.6](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.5...wavekat-flow-v0.0.6) (2026-08-08)
 
 

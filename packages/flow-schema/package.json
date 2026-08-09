@@ -1,6 +1,6 @@
 {
   "name": "@wavekat/flow-schema",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "TypeScript model, JSON Schema, and structural validator for the WaveKat call-flow (\"Receptionist\") format. Types are generated from the normative schema at ../../schema/flow.v1.schema.json.",
   "type": "module",
   "license": "Apache-2.0",
