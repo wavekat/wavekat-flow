@@ -1,5 +1,36 @@
 {
   "description": "The worked `book` example: a full booking flow with split opening hours, holiday exceptions, a buffer, and all four exits wired — the two failure exits both landing on voicemail, which is the pattern that keeps a calendar outage from becoming a dead line.",
   "structurallyValid": true,
-  "semantic": { "ok": true, "errors": [] }
+  "semantic": { "ok": true, "errors": [] },
+  "requiredAssets": [
+    "bkday_fri",
+    "bkday_mon",
+    "bkday_sat",
+    "bkday_sun",
+    "bkday_thu",
+    "bkday_today",
+    "bkday_tomorrow",
+    "bkday_tue",
+    "bkday_wed",
+    "bkpress_1",
+    "bkpress_2",
+    "bkpress_3",
+    "bktaken",
+    "bktime_0900",
+    "bktime_0930",
+    "bktime_1000",
+    "bktime_1030",
+    "bktime_1100",
+    "bktime_1130",
+    "bktime_1200",
+    "bktime_1230",
+    "bktime_1300",
+    "bktime_1330",
+    "bktime_1400",
+    "bktime_1430",
+    "bktime_1500",
+    "bktime_1530",
+    "bktime_1600",
+    "bktime_1630"
+  ]
 }
