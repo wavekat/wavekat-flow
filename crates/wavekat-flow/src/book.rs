@@ -85,12 +85,17 @@ pub const MAX_BOOK_OFFERS: u64 = 5;
 /// the server offers a time the vocabulary has no clip for, the caller
 /// hears silence where the time should be.
 ///
-/// **This constant is why the change is staged.** [`required_assets`]
-/// is computed from the value compiled into *this* build, not from
-/// anything a version carries — so a daemon still on the quarter hour,
-/// handed a version published after this moved, asks for `bktime_0915`,
-/// does not find it, and refuses to arm the flow at all. Platforms
-/// narrow what they offer first; this follows once the fleet has it.
+/// **Narrowing this is not a free change.** [`required_assets`] is
+/// computed from the value compiled into *this* build, not from anything
+/// a version carries — so a daemon still on the quarter hour, handed a
+/// version published against a narrower grid, asks for `bktime_0915`,
+/// does not find it, and refuses to arm the flow at all.
+///
+/// That does not make the change wait on the fleet, which never fully
+/// updates. A renderer covers the devices it must serve by rendering the
+/// union of every grid still installed; [`vocabulary_refs_on`] is how it
+/// enumerates the members it no longer compiles in. See the platform's
+/// docs/36.
 ///
 /// [`required_assets`]: crate::model_ext::required_assets
 pub const BOOK_GRANULARITY_MINS: u64 = 30;
@@ -207,21 +212,33 @@ fn minutes_of(hhmm: &str) -> Option<u64> {
 /// instants and so may drop a candidate this keeps on a daylight-saving
 /// boundary. That direction is safe: the vocabulary may be a superset (a
 /// clip nobody plays), never a subset (a time nobody can say).
-fn starts_in_range(range: &TimeRange, duration_mins: u64) -> Vec<u64> {
+/// The same walk on a grid this build does not necessarily use.
+///
+/// A device decides whether it can run a flow by computing the required
+/// set from the grid compiled into *it*, so a renderer that knows only
+/// its own can serve only devices that agree. Rendering the union of
+/// every grid still installed is what removes that coupling, and this is
+/// how the other members are enumerated. See the platform's docs/36.
+fn starts_in_range_on(range: &TimeRange, duration_mins: u64, granularity_mins: u64) -> Vec<u64> {
+    // Stepping by zero would never terminate — on a device, that is a
+    // hang rather than a wrong answer.
+    if granularity_mins == 0 {
+        return Vec::new();
+    }
     let (Some(open), Some(close)) = (minutes_of(&range.open), minutes_of(&range.close)) else {
         return Vec::new();
     };
     if close <= open {
         return Vec::new();
     }
-    let first = open.div_ceil(BOOK_GRANULARITY_MINS) * BOOK_GRANULARITY_MINS;
+    let first = open.div_ceil(granularity_mins) * granularity_mins;
     let mut starts = Vec::new();
     let mut mins = first;
     while mins < close {
         if mins + duration_mins <= close {
             starts.push(mins);
         }
-        mins += BOOK_GRANULARITY_MINS;
+        mins += granularity_mins;
     }
     starts
 }
@@ -236,6 +253,19 @@ fn starts_in_range(range: &TimeRange, duration_mins: u64) -> Vec<u64> {
 /// (when it is played). Empty for every other kind of node, so a caller
 /// can map it over a whole flow.
 pub fn vocabulary_refs(node: &Node) -> Vec<String> {
+    vocabulary_refs_on(node, BOOK_GRANULARITY_MINS)
+}
+
+/// The same set on a grid this build does not necessarily use.
+///
+/// Twin of `bookVocabularyRefs(node, { granularityMins })`. Only a
+/// *renderer* has a reason to call this: it has to satisfy devices whose
+/// compiled-in grid differs from its own, and covering the union of the
+/// grids still installed is what stops a narrowing change from waiting on
+/// a fleet that never fully updates. A device answering "can I run this
+/// flow?" uses [`vocabulary_refs`] and its own constant, which is the
+/// question it is actually being asked. See the platform's docs/36.
+pub fn vocabulary_refs_on(node: &Node, granularity_mins: u64) -> Vec<String> {
     let Node::Book {
         schedule,
         exceptions,
@@ -283,7 +313,7 @@ pub fn vocabulary_refs(node: &Node) -> Vec<String> {
     }
 
     for range in ranges {
-        for start in starts_in_range(range, *duration) {
+        for start in starts_in_range_on(range, *duration, granularity_mins) {
             refs.insert(time_ref(start));
         }
     }
@@ -336,9 +366,66 @@ mod tests {
         // First grid point at or after 09:10 is 09:30 — never 09:10, and
         // no longer 09:15; the last start that still finishes by 10:30
         // with a 30-minute appointment is 10:00.
-        assert_eq!(starts_in_range(&range, 30), vec![570, 600]);
+        assert_eq!(
+            starts_in_range_on(&range, 30, BOOK_GRANULARITY_MINS),
+            vec![570, 600]
+        );
         // An appointment longer than the window produces nothing at all.
-        assert!(starts_in_range(&range, 120).is_empty());
+        assert!(starts_in_range_on(&range, 120, BOOK_GRANULARITY_MINS).is_empty());
+    }
+
+    // The twin of `bookVocabularyRefs(node, { granularityMins })`.
+    //
+    // A device answers "can I run this flow?" from the grid compiled into
+    // it, so a renderer that only knows its own can serve only devices
+    // that agree — which makes narrowing wait on the whole fleet
+    // updating, an event that does not occur. This is how a renderer
+    // enumerates the grids it no longer compiles in, so it can cover the
+    // union. See the platform's docs/36.
+    #[test]
+    fn an_explicit_grid_is_walked_instead_of_this_builds() {
+        let range = TimeRange {
+            open: "09:00".into(),
+            close: "11:00".into(),
+        };
+        // Quarter hours, from a build whose own constant says thirty.
+        assert_eq!(
+            starts_in_range_on(&range, 30, 15),
+            vec![540, 555, 570, 585, 600, 615, 630]
+        );
+        // This build's own grid, for contrast — the halves of the same
+        // window, and what every existing caller keeps getting.
+        assert_eq!(
+            starts_in_range_on(&range, 30, BOOK_GRANULARITY_MINS),
+            vec![540, 570, 600, 630]
+        );
+    }
+
+    #[test]
+    fn a_finer_grid_is_a_superset_of_a_coarser_one() {
+        // The property the union rests on: widening never drops a ref, so
+        // a device on the finer grid finds everything it computes inside
+        // what a renderer covering both froze.
+        let range = TimeRange {
+            open: "09:00".into(),
+            close: "17:00".into(),
+        };
+        let fine = starts_in_range_on(&range, 30, 15);
+        for start in starts_in_range_on(&range, 30, 30) {
+            assert!(fine.contains(&start), "{start} missing from the finer grid");
+        }
+    }
+
+    #[test]
+    fn a_zero_grid_yields_nothing_rather_than_spinning() {
+        // Unreachable through `vocabulary_refs`, which passes a constant.
+        // Asserted anyway because the loop steps by this value, and the
+        // failure would be a hung device rather than a wrong answer.
+        let range = TimeRange {
+            open: "09:00".into(),
+            close: "17:00".into(),
+        };
+        assert!(starts_in_range_on(&range, 30, 0).is_empty());
     }
 
     #[test]
@@ -347,12 +434,12 @@ mod tests {
             open: "17:00".into(),
             close: "09:00".into(),
         };
-        assert!(starts_in_range(&backwards, 30).is_empty());
+        assert!(starts_in_range_on(&backwards, 30, BOOK_GRANULARITY_MINS).is_empty());
         let nonsense = TimeRange {
             open: "nine".into(),
             close: "five".into(),
         };
-        assert!(starts_in_range(&nonsense, 30).is_empty());
+        assert!(starts_in_range_on(&nonsense, 30, BOOK_GRANULARITY_MINS).is_empty());
     }
 
     #[test]

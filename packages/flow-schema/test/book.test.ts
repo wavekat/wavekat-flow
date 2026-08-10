@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BOOK_GRANULARITY_MINS,
   BOOK_TAKEN_REF,
   bookVocabularyRefs,
   parseBookVocabularyRef,
@@ -145,6 +146,71 @@ describe('bookVocabularyRefs', () => {
     // it may come from a clock.
     const node = bookNode();
     expect(bookVocabularyRefs(node)).toEqual(bookVocabularyRefs(node));
+  });
+});
+
+// Asking for a grid other than this build's own.
+//
+// A device decides whether it can run a flow by computing this set from
+// the constant compiled into *it*, so a renderer that only knows its own
+// grid can only ever satisfy devices that agree with it. The parameter
+// exists so the platform can render the union of every grid still
+// installed and stop being pinned to its oldest device's opinion — see
+// the platform's docs/36. The default is what every existing caller,
+// including that arming check, keeps getting.
+describe('bookVocabularyRefs — an explicit grid', () => {
+  const timesOn = (node: BookNode, granularityMins: number): string[] =>
+    bookVocabularyRefs(node, { granularityMins }).filter(
+      (ref) => parseBookVocabularyRef(ref)?.kind === 'time',
+    );
+
+  it("walks the grid it was given, not this build's", () => {
+    expect(timesOn(bookNode(), 15)).toEqual([
+      'bktime_0900',
+      'bktime_0915',
+      'bktime_0930',
+      'bktime_0945',
+      'bktime_1000',
+      'bktime_1015',
+      'bktime_1030',
+    ]);
+  });
+
+  it("reproduces the default exactly when handed this build's own grid", () => {
+    const node = bookNode({ schedule: { tue: [{ open: '09:10', close: '16:40' }] } });
+    expect(bookVocabularyRefs(node, { granularityMins: BOOK_GRANULARITY_MINS })).toEqual(
+      bookVocabularyRefs(node),
+    );
+  });
+
+  it('leaves the non-time refs alone', () => {
+    // Day phrases, keypad clips and the taken line have nothing to do
+    // with the grid; a caller unioning two grids must not find them
+    // duplicated or dropped.
+    const coarse = bookVocabularyRefs(bookNode(), { granularityMins: 60 });
+    for (const ref of ['bkday_mon', 'bkpress_1', BOOK_TAKEN_REF]) {
+      expect(coarse).toContain(ref);
+    }
+  });
+
+  it('makes a finer grid a superset of a coarser one', () => {
+    // The property the union rests on: widening never loses a ref, so a
+    // device on the finer grid finds everything it computes inside what
+    // a renderer covering both froze.
+    const node = bookNode({ schedule: { mon: [{ open: '09:00', close: '17:00' }] } });
+    const fine = new Set(bookVocabularyRefs(node, { granularityMins: 15 }));
+    for (const ref of bookVocabularyRefs(node, { granularityMins: 30 })) {
+      expect(fine).toContain(ref);
+    }
+  });
+
+  it('refuses a grid that is not a positive whole number of minutes', () => {
+    // A zero would not terminate and a fraction would produce refs no
+    // renderer can name; both are a caller's bug, and silently falling
+    // back to the default would hide it.
+    for (const bad of [0, -30, 7.5, Number.NaN]) {
+      expect(() => bookVocabularyRefs(bookNode(), { granularityMins: bad })).toThrow();
+    }
   });
 });
 

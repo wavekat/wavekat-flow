@@ -94,11 +94,15 @@ export const MAX_BOOK_OFFERS = 5;
  * **Narrowing this is not a free change**, and the direction matters.
  * A daemon computes `requiredAssets` from *its own* copy of this
  * constant, not from anything the version carries — so a device still on
- * the quarter hour, handed a version published after this change, asks
- * for `bktime_0915`, does not find it, and refuses to arm the flow at
- * all. The safe order is: platforms narrow what they *offer* first
- * (leaving the frozen set a superset), fleets update, and only then does
- * this move. See the platform's docs/35 §2.
+ * the quarter hour, handed a version published against a narrower one,
+ * asks for `bktime_0915`, does not find it, and refuses to arm the flow
+ * at all.
+ *
+ * That does **not** make a change here wait on the fleet, which never
+ * fully updates. A renderer covers the devices it has to serve by
+ * rendering the union of every grid still installed —
+ * {@link BookVocabularyOptions.granularityMins} is how it enumerates the
+ * members it no longer compiles in. See the platform's docs/36.
  */
 export const BOOK_GRANULARITY_MINS = 30;
 
@@ -217,17 +221,42 @@ function minutesOf(hhmm: string): number | null {
  * allowed to be a superset (a clip nobody plays), never a subset (a time
  * nobody can say).
  */
-function startsInRange(range: TimeRange, durationMins: number): number[] {
+function startsInRange(
+  range: TimeRange,
+  durationMins: number,
+  granularityMins: number,
+): number[] {
   const open = minutesOf(range.open);
   const close = minutesOf(range.close);
   if (open === null || close === null || close <= open) return [];
 
-  const first = Math.ceil(open / BOOK_GRANULARITY_MINS) * BOOK_GRANULARITY_MINS;
+  const first = Math.ceil(open / granularityMins) * granularityMins;
   const starts: number[] = [];
-  for (let mins = first; mins < close; mins += BOOK_GRANULARITY_MINS) {
+  for (let mins = first; mins < close; mins += granularityMins) {
     if (mins + durationMins <= close) starts.push(mins);
   }
   return starts;
+}
+
+/** Options for {@link bookVocabularyRefs}. */
+export interface BookVocabularyOptions {
+  /**
+   * Walk this grid instead of {@link BOOK_GRANULARITY_MINS}.
+   *
+   * Exists for one caller: a renderer that has to satisfy devices which
+   * do not share its own constant. A device decides whether it can run a
+   * flow by computing this set from the grid compiled into *it*, so a
+   * renderer that only knows its own can only ever serve devices that
+   * agree — which makes narrowing the grid wait on the whole fleet
+   * updating, an event that does not occur. Rendering the union of every
+   * grid still installed removes the wait; this is how you enumerate the
+   * other members. See the platform's docs/36.
+   *
+   * Not for deciding what to *offer* a caller. That is the build's own
+   * constant, and disagreeing with it means offering a time no clip
+   * exists for.
+   */
+  granularityMins?: number;
 }
 
 /**
@@ -240,7 +269,15 @@ function startsInRange(range: TimeRange, durationMins: number): number[] {
  * the same at publish (when it is rendered) and on a call months later
  * (when it is played).
  */
-export function bookVocabularyRefs(node: BookNode): string[] {
+export function bookVocabularyRefs(node: BookNode, options: BookVocabularyOptions = {}): string[] {
+  const granularityMins = options.granularityMins ?? BOOK_GRANULARITY_MINS;
+  // A zero would not terminate and a fraction would name minutes no ref
+  // format can spell. Both are the caller's bug; falling back to the
+  // default would hide it behind a set that looks plausible.
+  if (!Number.isInteger(granularityMins) || granularityMins < 1) {
+    throw new Error(`granularityMins must be a positive whole number of minutes, got ${granularityMins}`);
+  }
+
   const refs = new Set<string>();
 
   for (const day of BOOK_DAY_KEYS) refs.add(bookDayRef(day));
@@ -274,7 +311,9 @@ export function bookVocabularyRefs(node: BookNode): string[] {
   }
 
   for (const range of ranges) {
-    for (const start of startsInRange(range, duration)) refs.add(bookTimeRef(start));
+    for (const start of startsInRange(range, duration, granularityMins)) {
+      refs.add(bookTimeRef(start));
+    }
   }
 
   return [...refs].sort();
