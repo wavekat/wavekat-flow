@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.11](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.10...flow-schema-v0.0.11) (2026-08-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **book:** `BOOK_GRANULARITY_MINS` moves from 15 to 30, so `bookVocabularyRefs` / `vocabulary_refs` return a smaller set for the same node — 63 clips per voice rather than 111, and 29 rather than 44 for a Mon-Fri 09:00-17:00 step with 30-minute appointments.
+
+### Features
+
+* **book:** half-hour vocabulary grid ([#43](https://github.com/wavekat/wavekat-flow/issues/43)) ([988d7a4](https://github.com/wavekat/wavekat-flow/commit/988d7a4e4fd2f7002de4794d44b8e5e81e0fc1f2))
+
+
+### Documentation
+
+* **flow-schema:** how to take a grid change safely ([b21c6d5](https://github.com/wavekat/wavekat-flow/commit/b21c6d5eca2b2292b1b43e42545f391cfb3908ac))
+
 ## [0.0.10](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.9...flow-schema-v0.0.10) (2026-08-09)
 
 
