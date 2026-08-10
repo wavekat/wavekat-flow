@@ -98,7 +98,7 @@ export const MAX_BOOK_OFFERS = 5;
  * for `bktime_0915`, does not find it, and refuses to arm the flow at
  * all. The safe order is: platforms narrow what they *offer* first
  * (leaving the frozen set a superset), fleets update, and only then does
- * this move. See the platform's docs/34 §2.
+ * this move. See the platform's docs/35 §2.
  */
 export const BOOK_GRANULARITY_MINS = 30;
 
