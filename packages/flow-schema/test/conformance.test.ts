@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import { checkFlow } from '../src/index.js';
+import { checkFlow, requiredAssets } from '../src/index.js';
 import { validateStructure } from '../src/structure.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +38,10 @@ type Expectation = {
    * the deliberate cross-language divergence (unknown fields warn in TS,
    * are silently ignored by Rust serde; both still accept the document). */
   tsWarnings?: string[];
+  /** Optional: the exact asset set the daemon must have on disk before it
+   * will arm this flow. See the describe block below for why it is pinned
+   * here rather than in either language's own tests. */
+  requiredAssets?: string[];
 };
 
 function casesIn(version: string, bucket: 'valid' | 'invalid'): string[] {
@@ -102,5 +106,41 @@ describe.each(CORPUS_VERSIONS)('conformance corpus %s — semantic (checkFlow)',
         }
       });
     }
+  }
+});
+
+// The asset set, pinned across both languages.
+//
+// This is the one place a `book` node's vocabulary arithmetic is checked
+// against something outside the language that computed it. Both sides
+// derive the set from their own copy of `BOOK_GRANULARITY_MINS`, and a
+// daemon refuses to arm a flow whose required assets are not all on disk
+// — so if the two constants ever drift, the symptom is not a failing
+// test but a customer's phone line going quiet, on the devices that
+// happened to update late.
+//
+// Exact-set equality, unlike the error expectations above: this set is
+// the contract itself, not a description of one, and a missing member is
+// exactly the bug worth catching.
+// Only cases that pin a set: an `invalid` document has no assets to
+// speak of, and a flow with no `book` node has nothing that could drift.
+// Collected before `describe`, because a version whose corpus pins
+// nothing must produce no suite rather than an empty one.
+const ASSET_CASES = CORPUS_VERSIONS.map((version) => ({
+  version,
+  cases: (['valid', 'invalid'] as const).flatMap((bucket) =>
+    casesIn(version, bucket)
+      .map((name) => ({ bucket, name, expected: expectation(version, bucket, name) }))
+      .filter((entry) => entry.expected.requiredAssets !== undefined),
+  ),
+})).filter((entry) => entry.cases.length > 0);
+
+describe.each(ASSET_CASES)('conformance corpus $version — required assets', ({ cases, version }) => {
+  for (const { bucket, name, expected } of cases) {
+    it(`${bucket}/${name}`, () => {
+      const result = checkFlow(source(version, bucket, name));
+      expect(result.flow, `${bucket}/${name} must parse to pin its assets`).toBeDefined();
+      expect(requiredAssets(result.flow!)).toEqual(expected.requiredAssets);
+    });
   }
 });

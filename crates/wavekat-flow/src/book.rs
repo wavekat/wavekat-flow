@@ -12,12 +12,12 @@
 //!
 //! So the times a flow can *ever* offer are enumerated at publish and
 //! rendered then, exactly like its prompts. Two things make that a small
-//! finite set rather than an impossible one: starts snap to a quarter
-//! hour ([`BOOK_GRANULARITY_MINS`]), and the node already declares the
-//! only hours it books in. A business open 9–5 on weekdays therefore
-//! needs 32 time clips, not 1440 — and needs them regardless of which
-//! week the caller rings in, because "nine thirty" is the same two words
-//! on every one of those days.
+//! finite set rather than an impossible one: starts snap to a half hour
+//! ([`BOOK_GRANULARITY_MINS`]), and the node already declares the only
+//! hours it books in. A business open 9–5 on weekdays therefore needs 16
+//! time clips, not 1440 — and needs them regardless of which week the
+//! caller rings in, because "nine thirty" is the same two words on every
+//! one of those days.
 //!
 //! # Why it is split day + time
 //!
@@ -78,13 +78,22 @@ pub const MAX_BOOK_HORIZON_DAYS: u64 = 31;
 /// digits the vocabulary carries.
 pub const MAX_BOOK_OFFERS: u64 = 5;
 
-/// Every candidate appointment start lands on a quarter hour.
+/// Every candidate appointment start lands on a half hour.
 ///
 /// Load-bearing, not cosmetic: this is what bounds the vocabulary.
 /// Twin: the platform's `SLOT_GRANULARITY_MINS`, which must agree — if
 /// the server offers a time the vocabulary has no clip for, the caller
 /// hears silence where the time should be.
-pub const BOOK_GRANULARITY_MINS: u64 = 15;
+///
+/// **This constant is why the change is staged.** [`required_assets`]
+/// is computed from the value compiled into *this* build, not from
+/// anything a version carries — so a daemon still on the quarter hour,
+/// handed a version published after this moved, asks for `bktime_0915`,
+/// does not find it, and refuses to arm the flow at all. Platforms
+/// narrow what they offer first; this follows once the fleet has it.
+///
+/// [`required_assets`]: crate::model_ext::required_assets
+pub const BOOK_GRANULARITY_MINS: u64 = 30;
 
 // ── Vocabulary refs ────────────────────────────────────────────────────
 
@@ -190,7 +199,7 @@ fn minutes_of(hhmm: &str) -> Option<u64> {
     (hours <= 23 && mins <= 59).then_some(hours * 60 + mins)
 }
 
-/// The starts a single open range can produce: on the quarter-hour grid,
+/// The starts a single open range can produce: on the half-hour grid,
 /// from the first grid point at or after `open`, while the whole
 /// appointment still finishes by `close`.
 ///
@@ -324,9 +333,10 @@ mod tests {
             open: "09:10".into(),
             close: "10:30".into(),
         };
-        // First grid point at or after 09:10 is 09:15; the last start that
-        // still finishes by 10:30 with a 30-minute appointment is 10:00.
-        assert_eq!(starts_in_range(&range, 30), vec![555, 570, 585, 600]);
+        // First grid point at or after 09:10 is 09:30 — never 09:10, and
+        // no longer 09:15; the last start that still finishes by 10:30
+        // with a 30-minute appointment is 10:00.
+        assert_eq!(starts_in_range(&range, 30), vec![570, 600]);
         // An appointment longer than the window produces nothing at all.
         assert!(starts_in_range(&range, 120).is_empty());
     }
@@ -419,13 +429,13 @@ mod tests {
     #[test]
     fn an_offer_ends_with_the_key_that_takes_it() {
         let tz = crate::hours::resolve_tz("UTC").unwrap();
-        let start = datetime!(2026-07-07 09:15 UTC);
+        let start = datetime!(2026-07-07 09:30 UTC);
         let now = datetime!(2026-07-07 08:00 UTC);
         assert_eq!(
             offer_refs(start, now, tz, 2),
             vec![
                 "bkday_today".to_string(),
-                "bktime_0915".to_string(),
+                "bktime_0930".to_string(),
                 "bkpress_2".to_string()
             ],
         );

@@ -22,6 +22,10 @@ struct Expectation {
     #[serde(rename = "structurallyValid")]
     structurally_valid: bool,
     semantic: Semantic,
+    /// Optional: the exact asset set a daemon must have on disk before it
+    /// will arm this flow. See `corpus_required_assets_match_expectations`.
+    #[serde(rename = "requiredAssets", default)]
+    required_assets: Option<Vec<String>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -168,4 +172,46 @@ fn corpus_semantic_matches_expectations() {
             }
         }
     }
+}
+
+// The asset set, pinned across both languages.
+//
+// This is the one place a `book` node's vocabulary arithmetic is checked
+// against something outside the language that computed it. Both sides derive
+// the set from their own copy of `BOOK_GRANULARITY_MINS`, and a daemon
+// refuses to arm a flow whose required assets are not all on disk — so if the
+// two ever drift, the symptom is not a failing test but a customer's phone
+// line going quiet, on whichever devices updated late.
+//
+// Exact-set equality, unlike the `errors` expectation above: this set *is* the
+// contract, not a description of one, and a missing member is precisely the
+// bug worth catching.
+#[test]
+fn corpus_required_assets_match_expectations() {
+    let mut pinned = 0usize;
+    for version in corpus_versions() {
+        for bucket in ["valid", "invalid"] {
+            for (stem, path) in yaml_cases(&version, bucket) {
+                let exp_path = corpus_dir(&version, bucket).join(format!("{stem}.expected.json"));
+                let exp: Expectation =
+                    serde_json::from_str(&fs::read_to_string(exp_path).unwrap()).unwrap();
+                let Some(expected) = exp.required_assets else {
+                    continue;
+                };
+
+                let yaml = fs::read_to_string(&path).unwrap();
+                let flow: Flow = serde_yaml_ng::from_str(&yaml)
+                    .unwrap_or_else(|e| panic!("{version}/{bucket}/{stem} must parse: {e}"));
+                assert_eq!(
+                    wavekat_flow::required_assets(&flow),
+                    expected,
+                    "required assets differ for {version}/{bucket}/{stem}"
+                );
+                pinned += 1;
+            }
+        }
+    }
+    // A corpus that stopped pinning any would make this test pass by
+    // doing nothing, which is the one way it could fail silently.
+    assert!(pinned > 0, "no corpus case pins a required-asset set");
 }

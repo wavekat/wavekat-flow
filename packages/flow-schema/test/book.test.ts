@@ -69,25 +69,23 @@ describe('bookVocabularyRefs', () => {
     expect(bookVocabularyRefs(bookNode())).toContain('bkpress_3');
   });
 
-  it('puts starts on the quarter hour and leaves room for the whole appointment', () => {
+  it('puts starts on the half hour and leaves room for the whole appointment', () => {
     // 09:00–11:00, 30-minute appointments: the last start that still
     // finishes by close is 10:30.
     expect(times(bookNode())).toEqual([
       'bktime_0900',
-      'bktime_0915',
       'bktime_0930',
-      'bktime_0945',
       'bktime_1000',
-      'bktime_1015',
       'bktime_1030',
     ]);
   });
 
-  it('starts at the first quarter hour at or after opening', () => {
-    // 09:10 opens onto a 09:15 grid; 09:45 is dropped because a
-    // 30-minute appointment starting there runs past the 10:10 close.
-    const node = bookNode({ schedule: { tue: [{ open: '09:10', close: '10:10' }] } });
-    expect(times(node)).toEqual(['bktime_0915', 'bktime_0930']);
+  it('starts at the first half hour at or after opening', () => {
+    // 09:10 opens onto a 09:30 grid — never 09:10, and no longer 09:15.
+    // 10:30 is dropped because a 30-minute appointment starting there
+    // runs past the 10:40 close.
+    const node = bookNode({ schedule: { tue: [{ open: '09:10', close: '10:40' }] } });
+    expect(times(node)).toEqual(['bktime_0930', 'bktime_1000']);
   });
 
   it('is the union over every day and every window, without duplicates', () => {
@@ -103,10 +101,8 @@ describe('bookVocabularyRefs', () => {
     });
     expect(times(node)).toEqual([
       'bktime_0900',
-      'bktime_0915',
       'bktime_0930',
       'bktime_1400',
-      'bktime_1415',
       'bktime_1430',
     ]);
   });

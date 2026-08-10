@@ -14,10 +14,10 @@
 // rendered then, exactly like its prompts. Two things make that a small
 // finite set rather than an impossible one:
 //
-//   * starts snap to a quarter hour ({@link BOOK_GRANULARITY_MINS}), and
+//   * starts snap to a half hour ({@link BOOK_GRANULARITY_MINS}), and
 //   * the node already declares the only hours it books in.
 //
-// A business open 9–5 on weekdays therefore needs 32 time clips, not
+// A business open 9–5 on weekdays therefore needs 16 time clips, not
 // 1440 — and it needs them regardless of which week the caller rings in,
 // because "nine thirty" is the same two words on every one of those days.
 //
@@ -83,15 +83,24 @@ export const MAX_BOOK_HORIZON_DAYS = 31;
 export const MAX_BOOK_OFFERS = 5;
 
 /**
- * Every candidate appointment start lands on a quarter hour.
+ * Every candidate appointment start lands on a half hour.
  *
  * Load-bearing, not cosmetic: this is what bounds the vocabulary above.
  * Widening it widens every published flow's render. Twin: the platform's
  * `SLOT_GRANULARITY_MINS`, which must agree — if the server offers a
  * time the vocabulary has no clip for, the caller hears silence where
  * the time should be.
+ *
+ * **Narrowing this is not a free change**, and the direction matters.
+ * A daemon computes `requiredAssets` from *its own* copy of this
+ * constant, not from anything the version carries — so a device still on
+ * the quarter hour, handed a version published after this change, asks
+ * for `bktime_0915`, does not find it, and refuses to arm the flow at
+ * all. The safe order is: platforms narrow what they *offer* first
+ * (leaving the frozen set a superset), fleets update, and only then does
+ * this move. See the platform's docs/35 §2.
  */
-export const BOOK_GRANULARITY_MINS = 15;
+export const BOOK_GRANULARITY_MINS = 30;
 
 // ── Vocabulary refs ──────────────────────────────────────────────────────
 
@@ -198,7 +207,7 @@ function minutesOf(hhmm: string): number | null {
 }
 
 /**
- * The starts a single open range can produce: on the quarter-hour grid,
+ * The starts a single open range can produce: on the half-hour grid,
  * from the first grid point at or after `open`, while the whole
  * appointment still finishes by `close`.
  *
