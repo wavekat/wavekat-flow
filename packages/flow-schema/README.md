@@ -68,6 +68,23 @@ keys, implicit typing) and reports node-level source ranges for editor
 diagnostics. Validation covers what a schema can't: reachability, caller
 traps, exit-set exactness, hours math, DTMF and prompt rules.
 
+## Upgrading when the booking grid moves
+
+`BOOK_GRANULARITY_MINS` decides which times a `book` node can ever say, so
+changing it changes what `bookVocabularyRefs` — and therefore
+`requiredAssets` — returns for a node nobody edited.
+
+A device computes that set from the version of the Rust crate **compiled
+into it**, not from anything the flow document carries, and refuses to arm a
+flow whose required assets aren't all on disk. So an authoring side that
+adopts a narrower grid first publishes versions that older devices consider
+incomplete, and they stop running the whole flow — not just its booking
+step.
+
+Adopt in this order: release, then every device in the field, then the
+authoring side. Narrowing leaves the published set a superset in the
+meantime, which is the safe direction.
+
 ## One format, two languages
 
 This package is the TypeScript (authoring) half of the format. Parsing,
