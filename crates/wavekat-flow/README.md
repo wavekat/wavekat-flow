@@ -67,6 +67,23 @@ if let Err(errors) = validate::validate(&flow) {
 }
 ```
 
+## Upgrading when the booking grid moves
+
+`BOOK_GRANULARITY_MINS` decides which times a `book` node can ever say, so
+changing it changes what `vocabulary_refs` — and therefore
+`required_assets` — returns for a node nobody edited.
+
+This crate is where a device answers that question, from the constant
+compiled into it rather than from anything the flow document carries, and a
+device refuses to arm a flow whose required assets aren't all on disk. So a
+device left on an older grid, handed a version published by an authoring
+side that already narrowed, asks for a clip that was never rendered and
+stops running the whole flow — not just its booking step.
+
+Take this crate's upgrade **before** the authoring side takes the matching
+`@wavekat/flow-schema`. Narrowing leaves the published set a superset in the
+meantime, which is the safe direction.
+
 ## One format, two languages
 
 This crate is the Rust half of the format. Authoring, comment-preserving
