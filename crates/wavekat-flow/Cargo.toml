@@ -2,7 +2,7 @@
 name = "wavekat-flow"
 # Literal (not workspace-inherited) so release-please's Cargo updater can
 # bump it — the cargo-workspace plugin doesn't rewrite [workspace.package].
-version = "0.0.7"
+version = "0.0.8"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

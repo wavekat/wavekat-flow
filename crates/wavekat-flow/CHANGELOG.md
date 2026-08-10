@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.7...wavekat-flow-v0.0.8) (2026-08-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **book:** `BOOK_GRANULARITY_MINS` moves from 15 to 30, so `bookVocabularyRefs` / `vocabulary_refs` return a smaller set for the same node — 63 clips per voice rather than 111, and 29 rather than 44 for a Mon-Fri 09:00-17:00 step with 30-minute appointments.
+
+### Features
+
+* **book:** half-hour vocabulary grid ([#43](https://github.com/wavekat/wavekat-flow/issues/43)) ([988d7a4](https://github.com/wavekat/wavekat-flow/commit/988d7a4e4fd2f7002de4794d44b8e5e81e0fc1f2))
+
+
+### Documentation
+
+* **wavekat-flow:** how to take a grid change safely ([55f7752](https://github.com/wavekat/wavekat-flow/commit/55f775250e7c0fb4dc71432f0d682921dd782924))
+
 ## [0.0.7](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.6...wavekat-flow-v0.0.7) (2026-08-09)
 
 
