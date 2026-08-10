@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.12](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.11...flow-schema-v0.0.12) (2026-08-10)
+
+
+### Features
+
+* **book:** enumerate a vocabulary on any grid ([#46](https://github.com/wavekat/wavekat-flow/issues/46)) ([2eaf65a](https://github.com/wavekat/wavekat-flow/commit/2eaf65ad6e59972e712a8a9e487783b31a951f30))
+
 ## [0.0.11](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.10...flow-schema-v0.0.11) (2026-08-10)
 
 

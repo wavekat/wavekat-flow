@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.9](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.8...wavekat-flow-v0.0.9) (2026-08-10)
+
+
+### Features
+
+* **book:** enumerate a vocabulary on any grid ([#46](https://github.com/wavekat/wavekat-flow/issues/46)) ([2eaf65a](https://github.com/wavekat/wavekat-flow/commit/2eaf65ad6e59972e712a8a9e487783b31a951f30))
+
 ## [0.0.8](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.7...wavekat-flow-v0.0.8) (2026-08-10)
 
 
