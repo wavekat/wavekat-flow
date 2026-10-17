@@ -295,6 +295,15 @@ describe('what an edit refuses', () => {
     expect(setEntry(future, 'menu')).toEqual({ ok: false, error: 'unsupported_version' });
   });
 
+  it('names an unsupported version before its unknown fields', () => {
+    // A newer document usually has fields this build doesn't know.
+    const future = SOURCE.replace('schema_version: 1', 'schema_version: 99').replace(
+      '    kind: hangup\n',
+      '    kind: hangup\n    colour: blue\n',
+    );
+    expect(setEntry(future, 'menu')).toEqual({ ok: false, error: 'unsupported_version' });
+  });
+
   it('still edits a document that only fails validation', () => {
     // A missing exit is a validation error, not a decode error.
     const unwired = SOURCE.replace('    exits: { next: menu }\n', '');

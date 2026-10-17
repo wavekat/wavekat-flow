@@ -62,11 +62,13 @@ function withFlow(source: string, edit: (flow: Flow) => EditError | undefined): 
     );
     return { ok: false, error: yaml ? 'parse_failed' : 'invalid_document' };
   }
-  if (parsed.issues.some((i) => i.code === 'unknown_field')) {
-    return { ok: false, error: 'unknown_field' };
-  }
+  // The version first: a newer document has fields this build can't know,
+  // and "unsupported version" is the better answer (as in Rust's `load`).
   if (!SUPPORTED_SCHEMA_VERSIONS.includes(parsed.flow.schema_version)) {
     return { ok: false, error: 'unsupported_version' };
+  }
+  if (parsed.issues.some((i) => i.code === 'unknown_field')) {
+    return { ok: false, error: 'unknown_field' };
   }
   const flow = structuredClone(parsed.flow);
   const error = edit(flow);
