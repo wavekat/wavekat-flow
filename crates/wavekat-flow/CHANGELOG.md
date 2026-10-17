@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.11](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.10...wavekat-flow-v0.0.11) (2026-10-17)
+
+
+### Features
+
+* canonical flow text and per-node notes ([#52](https://github.com/wavekat/wavekat-flow/issues/52)) ([3abc522](https://github.com/wavekat/wavekat-flow/commit/3abc522123eab33cbe4916cf2a70f97131e0db0d))
+
 ## [0.0.10](https://github.com/wavekat/wavekat-flow/compare/wavekat-flow-v0.0.9...wavekat-flow-v0.0.10) (2026-10-17)
 
 
