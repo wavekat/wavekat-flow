@@ -49,18 +49,21 @@ crates/wavekat-flow/           # wavekat-flow          (crate) — generated typ
 - **The logic lives here too.** Beyond the generated model, each package
   carries its language's hand-written half of the format:
   [`@wavekat/flow-schema`](./packages/flow-schema/README.md) — safe-subset
-  YAML parsing, semantic validation, hours math, comment-preserving source
-  edits, and flow diffing (authoring side);
+  YAML parsing, semantic validation, hours math, structured edits, and flow
+  diffing (authoring side);
   [`wavekat-flow`](./crates/wavekat-flow/README.md) — semantic validation,
   hours math, and the flow interpreter with its run trace (execution side).
+  Both write one **canonical text** for a flow, byte for byte the same, so
+  editing is parse → change the model → serialize in either language. See
+  [`docs/01-canonical-document.md`](./docs/01-canonical-document.md).
 
 ## What a schema *cannot* own
 
 A JSON Schema defines the document **shape** (types, enums, required fields,
 the `kind` discriminated union, defaults). It cannot express the format's
 **semantic rules** — graph reachability, exit-set exactness, hours/timezone
-math, DTMF digit validity, prompt length, safe-subset YAML parsing,
-comment-preserving edits, or the interpreter. Those live here as hand-written
+math, DTMF digit validity, prompt length, safe-subset YAML parsing, the
+canonical serialization, or the interpreter. Those live here as hand-written
 code per language — **pinned by the shared corpus**, not generated. See
 [`schema/README.md`](./schema/README.md) for the exact boundary.
 
@@ -92,7 +95,7 @@ in **[`docs/ROADMAP.md`](./docs/ROADMAP.md)**.
   corpus + back-compat runner, and both packages generating their model types
   from the schema, corpus green in TS and Rust.
 - **Phase 2 — full consolidation. Done.** The hand-written logic moved in
-  (TS: safe-subset parse, comment-preserving mutation, semantic validation,
+  (TS: safe-subset parse, structured edits, semantic validation,
   hours; Rust: validation, hours, engine, trace), each adapted to the
   generated types, with the corpus extended to pin the semantic outcomes in
   both languages.

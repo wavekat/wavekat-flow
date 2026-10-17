@@ -1,0 +1,23 @@
+schema_version: 2
+id: flow_comments
+name: "Comments # are not data"
+entry: hi
+nodes:
+  hi:
+    kind: greeting
+    note: C# is a note, not a comment
+    prompt: "It's # not a comment"
+    exits: { next: book }
+  book:
+    kind: book
+    prompt: "# inside a block scalar\nHere are the times.\n"
+    confirm_prompt: { audio: vprompt_c0, transcript: You're booked for }
+    schedule:
+      mon:
+        - { open: "09:00", close: "17:00" }
+    timezone: UTC
+    duration_mins: 30
+    exits: { booked: bye, no_slots: bye, no_input: bye, unavailable: bye }
+  bye:
+    kind: hangup
+    prompt: "multi line # still quoted"

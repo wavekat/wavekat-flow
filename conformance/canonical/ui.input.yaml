@@ -1,0 +1,23 @@
+schema_version: 2
+id: flow_ui
+name: The ui block is opaque
+entry: a
+nodes:
+  a:
+    kind: hangup
+    prompt: { audio: vprompt_a1, transcript: Bye }
+ui:
+  zoom: 1.0
+  grid: { snap: true, size: 0.5, origin: null }
+  positions:
+    a: [120, 40.5]
+    "1": [0, 0]
+  tiny: 0.0000001
+  huge: 1.0e+21
+  layers:
+    - name: main
+      visible: true
+    - [1, 2]
+    - []
+    - {}
+  tags: []

@@ -610,7 +610,7 @@ async fn run_menu<E: FlowEffects>(
     fx: &mut E,
     trace: &mut Trace,
     prompt: &Prompt,
-    options: &std::collections::HashMap<String, String>,
+    options: &indexmap::IndexMap<String, String>,
     retries: u64,
     timeout_secs: u64,
 ) -> Result<Step, EngineError> {

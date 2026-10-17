@@ -32,7 +32,9 @@ that executes it.
 | `validateOutbound` | `validateFlow` plus the rules for a call the app places itself (no `ring`, `book` or `transfer`; no loop that never waits for the callee) — call it instead of `validateFlow` for an outbound flow |
 | `validateStructure` / `flowV1Schema` | Structural (JSON Schema) validation via `ajv`, and the bundled schema itself |
 | `validateHours`, `isValidTimezone`, … | Business-hours / timezone checks |
-| `addNode`, `setExit`, `renameNode`, … | Comment-preserving YAML source edits (TS-only — the Rust side never edits) |
+| `serializeFlow` | The canonical text of a flow, byte for byte what the Rust crate's `Flow::to_yaml` writes |
+| `findComments` | The YAML comments in a source (reported by `parseFlow` as `comment_ignored`): they carry no meaning, and saving drops them; the words belong in `note` |
+| `addNode`, `setExit`, `renameNode`, … | Structured edits: parse → change the model → `serializeFlow`. Refuse a document that doesn't decode, has unknown fields, or declares an unsupported version |
 
 ## Quick start
 

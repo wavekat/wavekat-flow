@@ -12,7 +12,7 @@
 //! enum; these methods present the same query surface over the generated
 //! shape so the validator/engine read the same.
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use crate::model::{Flow, Node, Prompt};
 
@@ -76,7 +76,7 @@ impl Node {
     /// The node's wired exits (exit name → target node id), or `None` when
     /// the document omits the block. Every generated variant carries an
     /// `exits: Option<Exits>`, so this reads them uniformly.
-    pub fn exits(&self) -> Option<&HashMap<String, String>> {
+    pub fn exits(&self) -> Option<&IndexMap<String, String>> {
         let exits = match self {
             Node::Greeting { exits, .. }
             | Node::Hours { exits, .. }
@@ -107,6 +107,44 @@ impl Node {
             Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
         }
     }
+
+    /// [`Node::prompts`] with the field each comes from (`prompt`,
+    /// `confirm_prompt`), for a tool that reports or edits prompts by name.
+    pub fn prompt_slots(&self) -> Vec<(&'static str, &Prompt)> {
+        let fields = prompt_fields(self.kind()).unwrap_or(&[]);
+        let prompts = self.prompts();
+        self.slot_names(fields).into_iter().zip(prompts).collect()
+    }
+
+    /// [`Node::prompt_slots`], mutable: voice a text prompt as a clip, or
+    /// swap a local recording for the clip uploaded from it, then write the
+    /// flow back with [`Flow::to_yaml`].
+    pub fn prompt_slots_mut(&mut self) -> Vec<(&'static str, &mut Prompt)> {
+        let fields = prompt_fields(self.kind()).unwrap_or(&[]);
+        let names = self.slot_names(fields);
+        let prompts: Vec<&mut Prompt> = match self {
+            Node::Greeting { prompt, .. }
+            | Node::Menu { prompt, .. }
+            | Node::Message { prompt, .. } => vec![prompt],
+            Node::Hangup { prompt, .. } => prompt.iter_mut().collect(),
+            Node::Book {
+                prompt,
+                confirm_prompt,
+                ..
+            } => vec![prompt, confirm_prompt],
+            Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
+        };
+        names.into_iter().zip(prompts).collect()
+    }
+
+    /// The field names of the prompts this node has: all of `fields`,
+    /// except a `hangup` with no goodbye has none.
+    fn slot_names(&self, fields: &'static [&'static str]) -> Vec<&'static str> {
+        match self {
+            Node::Hangup { prompt: None, .. } => Vec::new(),
+            _ => fields.to_vec(),
+        }
+    }
 }
 
 /// Every audio asset the flow needs on the device, sorted and unique:
@@ -129,6 +167,59 @@ pub fn required_assets(flow: &Flow) -> Vec<String> {
         refs.extend(crate::book::vocabulary_refs(node));
     }
     refs.into_iter().collect()
+}
+
+/// Every node field that can hold a prompt, across all kinds.
+pub const PROMPT_FIELDS: &[&str] = &["prompt", "confirm_prompt"];
+
+/// The fields a node of `kind` speaks a prompt from, in the order
+/// [`Node::prompts`] returns them, or `None` for a kind this build doesn't
+/// know. Lets a tool name a prompt (`menu.prompt`) or set one by field.
+/// Kept in step with [`Node::prompts`] by the corpus test
+/// `prompt_fields_match_model`.
+pub fn prompt_fields(kind: &str) -> Option<&'static [&'static str]> {
+    match kind {
+        "greeting" | "menu" | "message" | "hangup" => Some(&PROMPT_FIELDS[..1]),
+        "book" => Some(PROMPT_FIELDS),
+        "hours" | "ring" | "transfer" => Some(&[]),
+        _ => None,
+    }
+}
+
+/// A generated-clip ref is a `voice_prompts` id (`vprompt_<alnum>`), a clip
+/// the platform produced and owns. Anything else in an `audio:` field is a
+/// ref the platform does *not* own. Twin: `model.ts` `isGeneratedClipRef`.
+pub fn is_generated_clip_ref(reference: &str) -> bool {
+    let Some(rest) = reference
+        .get(..8)
+        .filter(|p| p.eq_ignore_ascii_case("vprompt_"))
+        .map(|_| &reference[8..])
+    else {
+        return false;
+    };
+    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Audio file extensions an author may point an `audio:` at.
+const LOCAL_AUDIO_EXTENSIONS: &[&str] = &[
+    ".wav", ".wave", ".mp3", ".ogg", ".oga", ".opus", ".flac", ".m4a", ".aac", ".mp4", ".webm",
+];
+
+/// Does an `audio:` value name a file on the author's machine, to be
+/// uploaded before the flow is saved? A path separator or an audio file
+/// extension makes it a file; a generated clip ref never is. Any other ref
+/// (a clip shipped with the device, say) is neither, and is left alone.
+pub fn is_local_audio_ref(reference: &str) -> bool {
+    let r = reference.trim();
+    if r.is_empty() || is_generated_clip_ref(r) {
+        return false;
+    }
+    let lower = r.to_ascii_lowercase();
+    r.contains('/')
+        || r.contains('\\')
+        || LOCAL_AUDIO_EXTENSIONS
+            .iter()
+            .any(|ext| lower.ends_with(ext))
 }
 
 impl Prompt {
@@ -177,16 +268,46 @@ impl Flow {
         serde_yaml_ng::from_value(value)
     }
 
-    /// Serialize back to YAML (lossless for the model; the opaque `ui` block
-    /// round-trips).
-    pub fn to_yaml(&self) -> Result<String, serde_yaml_ng::Error> {
-        serde_yaml_ng::to_string(self)
+    /// The canonical text of this flow (docs/01-canonical-document.md §4):
+    /// the same bytes the TypeScript `serializeFlow` writes for the same
+    /// flow. Lossless for the model, so editing a document is
+    /// [`Flow::from_yaml`], change the flow, `to_yaml`. Comments in the
+    /// source are not part of the model and are not written; see
+    /// [`crate::edit::load`].
+    pub fn to_yaml(&self) -> String {
+        crate::canonical::to_yaml(self)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::model::Prompt;
+
+    #[test]
+    fn generated_clip_refs() {
+        use super::is_generated_clip_ref as clip;
+        assert!(clip("vprompt_ab12cd34"));
+        assert!(clip("VPROMPT_AB12"));
+        assert!(!clip("vprompt_"));
+        assert!(!clip("vprompt_ab-12"));
+        assert!(!clip("vprompt_ab12.wav"));
+        assert!(!clip("shipped_ref"));
+        assert!(!clip("vprompt"));
+        assert!(!clip("vpromp€_x"));
+    }
+
+    #[test]
+    fn local_audio_refs() {
+        use super::is_local_audio_ref as local;
+        assert!(local("./a.wav"));
+        assert!(local("a.WAV"));
+        assert!(local("dir/a"));
+        assert!(local("C:\\clips\\a"));
+        assert!(local("song.mp3"));
+        assert!(!local("vprompt_12ab"));
+        assert!(!local("shipped_ref"));
+        assert!(!local("  "));
+    }
 
     #[test]
     fn as_text_is_synthesizable_text_only() {

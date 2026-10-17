@@ -213,6 +213,7 @@ mod tests {
             timezone: "America/New_York".into(),
             exceptions,
             exits: None,
+            note: None,
         }
     }
 

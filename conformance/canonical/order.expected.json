@@ -1,0 +1,4 @@
+{
+  "description": "Schema-described objects are written in schema property order (`note` after `kind` and after `version`). Other maps keep document order, except that integer keys come first in ascending order, as JavaScript objects order them.",
+  "comments": 0
+}

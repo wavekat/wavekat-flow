@@ -1,0 +1,4 @@
+{
+  "description": "Comments are found (and counted) the same way in both languages, and dropped by the canonical text. A `#` inside a quoted scalar, a block scalar, or after a non-blank character is not a comment.",
+  "comments": 5
+}

@@ -11,7 +11,10 @@
 //! [`trace`] output) alongside the generated model, adapted to the generated
 //! types and pinned by the shared conformance corpus. The engine owns the
 //! [`engine::FlowEffects`] trait *definition*; the daemon keeps its live impl
-//! in its own codebase. Comment-preserving mutation stays TS-only.
+//! in its own codebase. Documents are edited through the model:
+//! [`Flow::from_yaml`], change the flow, [`Flow::to_yaml`] (the canonical
+//! text, identical to the TS side's); [`edit::load`] refuses what a save
+//! would lose.
 
 /// The generated document model (`Flow`, `Node`, `Prompt`, …), emitted
 /// from the schema by `typify` into `OUT_DIR/flow_types.rs`.
@@ -29,14 +32,24 @@ pub mod model {
 /// Hand-written helpers layered on the generated model (logic, not shape).
 mod model_ext;
 
+/// The canonical serialization behind [`Flow::to_yaml`].
+mod canonical;
+
 pub mod book;
+pub mod edit;
 pub mod engine;
 pub mod hours;
 pub mod trace;
 pub mod validate;
 
+/// Re-exported so callers name the generated maps' type without a matching
+/// `indexmap` dependency of their own.
+pub use indexmap;
 pub use model::*;
-pub use model_ext::{required_assets, NodeId};
+pub use model_ext::{
+    is_generated_clip_ref, is_local_audio_ref, prompt_fields, required_assets, NodeId,
+    PROMPT_FIELDS,
+};
 
 /// The normative JSON Schema (draft 2020-12) for format version 1, as a
 /// string, bundled so consumers can run structural validation without

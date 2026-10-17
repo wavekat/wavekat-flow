@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseFlow } from '../src/parse.js';
+import { findComments, parseFlow } from '../src/parse.js';
 import { promptTranscript, requiredAssets } from '../src/model.js';
 
 // The doc 48 "flow document, sketched" example — kept in sync with the
@@ -292,5 +292,87 @@ nodes:
     const range = nodeRanges['night_menu'];
     expect(range).toBeDefined();
     expect(source.slice(range![0], range![0] + 'night_menu'.length)).toBe('night_menu');
+  });
+});
+
+describe('notes and comments', () => {
+  const SRC = `# about this flow
+schema_version: 1
+id: flow_n
+name: Notes
+note: Reviewed in May.
+entry: hi
+nodes:
+  hi:
+    kind: hangup
+    note: Owner recorded this. # trailing
+    prompt: Bye.
+`;
+
+  it('decodes note on the flow and on a node, with no unknown-field warning', () => {
+    const { flow, issues } = parseFlow(SRC);
+    expect(flow?.note).toBe('Reviewed in May.');
+    expect(flow?.nodes['hi']?.note).toBe('Owner recorded this.');
+    expect(issues.map((i) => i.code)).not.toContain('unknown_field');
+  });
+
+  it('reports each comment as comment_ignored, with its range', () => {
+    const comments = parseFlow(SRC).issues.filter((i) => i.code === 'comment_ignored');
+    expect(comments).toHaveLength(2);
+    expect(comments.every((c) => c.severity === 'warning')).toBe(true);
+    const [first] = comments;
+    expect(first && SRC.slice(first.range?.[0], first.range?.[1])).toBe('# about this flow');
+  });
+
+  it('comment ranges are source offsets, however much structure comes before', () => {
+    // The yaml lexer yields control tokens that are not source text; a range
+    // must not count them (it used to drift by one per scalar).
+    const sources = [
+      SRC,
+      'a: 1 # one\nb: "x # y" # two\nc: |\n  # in\n  t\n# three\nd: [1, # four\n  2]\n',
+      '\ufeff--- # doc\na: 1\n... # end\n',
+      'a: 1\r\n# crlf\r\nb: 再 # 见\r\n',
+      'k: v\n'.repeat(50) + '# late\n',
+    ];
+    for (const source of sources) {
+      const found = findComments(source);
+      expect(found.length).toBeGreaterThan(0);
+      for (const c of found) {
+        const text = source.slice(c.range[0], c.range[1]);
+        expect(text.startsWith('#')).toBe(true);
+        expect(text.slice(1).trim()).toBe(c.text);
+        expect(source.slice(0, c.range[0]).split('\n').length).toBe(c.line);
+      }
+    }
+    // The issue carries the same range.
+    const text = SRC.replace('# about this flow\n', '');
+    const [trailing] = parseFlow(text).issues.filter((i) => i.code === 'comment_ignored');
+    expect(trailing && text.slice(trailing.range?.[0], trailing.range?.[1])).toBe('# trailing');
+  });
+
+  it('a note must be text', () => {
+    const { flow, issues } = parseFlow(SRC.replace('note: Reviewed in May.', 'note: [x]'));
+    expect(flow).toBeNull();
+    expect(issues.map((i) => i.code)).toContain('expected_string');
+  });
+});
+
+describe('known fields follow the schema', () => {
+  // The decoder lists each kind's fields by hand; the schema is the source
+  // of truth. A field added to the schema but not here would decode as
+  // unknown and block every edit.
+  it('every node kind knows exactly its schema properties', async () => {
+    const { flowV2Schema } = await import('../src/generated/schema.js');
+    const defs = (flowV2Schema as unknown as { $defs: Record<string, { properties?: Record<string, { const?: string }> }> }).$defs;
+    for (const def of Object.values(defs)) {
+      const kind = def.properties?.['kind']?.const;
+      if (!kind) continue;
+      const src = `schema_version: 2\nid: f\nname: F\nentry: a\nnodes:\n  a:\n${Object.keys(def.properties ?? {})
+        .filter((p) => p !== 'kind')
+        .map((p) => `    ${p}: x\n`)
+        .join('')}    kind: ${kind}\n`;
+      const unknown = parseFlow(src).issues.filter((i) => i.code === 'unknown_field');
+      expect(unknown, kind).toEqual([]);
+    }
   });
 });

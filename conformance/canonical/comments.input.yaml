@@ -1,0 +1,26 @@
+# A flow with comments: none of them survive a save.
+schema_version: 2
+id: flow_comments   # platform id
+name: "Comments # are not data"
+entry: hi
+nodes:
+  # The greeting.
+  hi:
+    kind: greeting
+    prompt: 'It''s # not a comment'
+    note: C# is a note, not a comment
+    exits: { next: book } # trailing
+  book:
+    kind: book
+    prompt: |
+      # inside a block scalar
+      Here are the times.
+    # after the block scalar
+    confirm_prompt: { audio: vprompt_c0, transcript: "You're booked for" }
+    schedule:
+      mon: [{ open: "09:00", close: "17:00" }]
+    timezone: UTC
+    duration_mins: 30
+    exits: { booked: bye, no_slots: bye, no_input: bye, unavailable: bye }
+  bye: { kind: hangup, prompt: "multi
+    line # still quoted" }

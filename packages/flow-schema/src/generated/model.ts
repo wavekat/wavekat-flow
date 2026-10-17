@@ -36,11 +36,15 @@ export interface Flow {
    */
   version?: number;
   /**
+   * The author's note about the whole flow: free text for people reading it, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
+  /**
    * Node id where execution begins.
    */
   entry: string;
   /**
-   * The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution.
+   * The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution, but it is the author's reading order and is kept on save.
    */
   nodes: {
     [k: string]: Node;
@@ -58,6 +62,10 @@ export interface Flow {
  */
 export interface GreetingNode {
   kind: 'greeting';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   prompt: Prompt;
   exits?: Exits;
   [k: string]: unknown;
@@ -84,6 +92,10 @@ export interface Exits {
  */
 export interface HoursNode {
   kind: 'hours';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   schedule: WeeklySchedule;
   /**
    * IANA zone (America/New_York). Validated to resolve at load.
@@ -134,6 +146,10 @@ export interface HoursException {
  */
 export interface MenuNode {
   kind: 'menu';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   prompt: Prompt;
   /**
    * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator.
@@ -151,6 +167,10 @@ export interface MenuNode {
  */
 export interface RingNode {
   kind: 'ring';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   timeout_secs: number;
   exits?: Exits;
   [k: string]: unknown;
@@ -160,6 +180,10 @@ export interface RingNode {
  */
 export interface MessageNode {
   kind: 'message';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   prompt: Prompt;
   max_secs?: number;
   tone?: MessageTone & string;
@@ -171,6 +195,10 @@ export interface MessageNode {
  */
 export interface TransferNode {
   kind: 'transfer';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   target: string;
   exits?: Exits;
   [k: string]: unknown;
@@ -180,6 +208,10 @@ export interface TransferNode {
  */
 export interface HangupNode {
   kind: 'hangup';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   prompt?: Prompt;
   exits?: Exits;
   [k: string]: unknown;
@@ -189,6 +221,10 @@ export interface HangupNode {
  */
 export interface BookNode {
   kind: 'book';
+  /**
+   * The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.
+   */
+  note?: string;
   prompt: Prompt;
   confirm_prompt: Prompt;
   schedule: WeeklySchedule;

@@ -1,0 +1,31 @@
+schema_version: 1
+id: flow_defaults
+name: Defaults are left out
+version: 1
+entry: welcome
+nodes:
+  welcome:
+    kind: greeting
+    prompt: Hello.
+    exits: { next: menu }
+  menu:
+    kind: menu
+    prompt: Press 1 for sales.
+    options: { "1": Sales }
+    retries: 1
+    timeout_secs: 5
+    exits: { "1": vm, no_input: vm, invalid: vm }
+  vm:
+    kind: message
+    prompt: Leave a message.
+    max_secs: 120
+    tone: beep
+    exits: {}
+  open:
+    kind: hours
+    timezone: UTC
+    schedule: {}
+    exceptions: []
+    exits: { open: welcome, closed: vm }
+  bye:
+    kind: hangup
