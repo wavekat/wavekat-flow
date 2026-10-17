@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.13](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.12...flow-schema-v0.0.13) (2026-10-17)
+
+
+### Features
+
+* add outbound flow validation ([#48](https://github.com/wavekat/wavekat-flow/issues/48)) ([0dad982](https://github.com/wavekat/wavekat-flow/commit/0dad982b1f67ab90ed7e7eec8e8187a1c4f54740))
+
 ## [0.0.12](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.11...flow-schema-v0.0.12) (2026-08-10)
 
 
