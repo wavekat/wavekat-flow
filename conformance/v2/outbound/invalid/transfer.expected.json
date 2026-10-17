@@ -1,0 +1,5 @@
+{
+  "description": "A `transfer` step is not offered on outbound calls yet, so outbound refuses it. The same document is valid as an inbound flow.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_node_not_allowed"] }
+}

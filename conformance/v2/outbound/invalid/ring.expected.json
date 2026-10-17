@@ -1,0 +1,5 @@
+{
+  "description": "A `ring` step hands the call to a person at the device. On a call the app places there is nobody standing by to take it, so outbound refuses the step. The same document is valid as an inbound flow.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_node_not_allowed"] }
+}

@@ -1,0 +1,29 @@
+schema_version: 2
+id: flow_outbound_hours
+name: Notice with an after-hours variant
+entry: check
+nodes:
+  check:
+    kind: hours
+    timezone: America/New_York
+    schedule:
+      mon: [{ open: "09:00", close: "17:00" }]
+      tue: [{ open: "09:00", close: "17:00" }]
+    exits: { open: notice, closed: after_hours }
+  notice:
+    kind: greeting
+    prompt: Your order is ready for pickup.
+    exits: { next: options }
+  options:
+    kind: menu
+    prompt: Press 1 to leave a message for the store, or 9 to hear this again.
+    options: { "1": Message, "9": Repeat }
+    exits: { "1": leave_message, "9": notice, no_input: bye, invalid: bye }
+  leave_message:
+    kind: message
+    prompt: Leave your message after the tone.
+  after_hours:
+    kind: hangup
+    prompt: Your order is ready. The store opens at nine tomorrow.
+  bye:
+    kind: hangup

@@ -1,0 +1,11 @@
+schema_version: 2
+id: flow_outbound_dangling
+name: Outbound with a broken exit
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Hello.
+    exits: { next: nowhere }
+  bye:
+    kind: hangup

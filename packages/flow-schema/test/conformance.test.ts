@@ -11,14 +11,14 @@
 // that uses a `book` node belongs to v1, because what it pins is how a
 // version-1 document is treated.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import { checkFlow, requiredAssets } from '../src/index.js';
+import { checkFlow, hasErrors, parseFlow, requiredAssets, validateOutbound } from '../src/index.js';
 import { validateStructure } from '../src/structure.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ type Expectation = {
   requiredAssets?: string[];
 };
 
-function casesIn(version: string, bucket: 'valid' | 'invalid'): string[] {
+function casesIn(version: string, bucket: string): string[] {
   const dir = resolve(corpusRoot, version, bucket);
   return readdirSync(dir)
     .filter((f) => f.endsWith('.yaml'))
@@ -141,6 +141,49 @@ describe.each(ASSET_CASES)('conformance corpus $version — required assets', ({
       const result = checkFlow(source(version, bucket, name));
       expect(result.flow, `${bucket}/${name} must parse to pin its assets`).toBeDefined();
       expect(requiredAssets(result.flow!)).toEqual(expected.requiredAssets);
+    });
+  }
+});
+
+// The outbound profile: `conformance/vN/outbound/{valid,invalid}`, run
+// through `validateOutbound` (which includes the base validation) with the
+// same subset contract as the semantic corpus above. Kept out of the
+// top-level `valid/`/`invalid/` buckets on purpose: a flow refused for
+// outbound — a `ring` step, say — is a perfectly good inbound flow. The
+// Rust crate runs the same cases through `validate_outbound`.
+const OUTBOUND_CASES = CORPUS_VERSIONS.flatMap((version) =>
+  (['valid', 'invalid'] as const).flatMap((bucket) => {
+    const dir = resolve(corpusRoot, version, 'outbound', bucket);
+    if (!existsSync(dir)) return [];
+    return casesIn(version, `outbound/${bucket}`).map((name) => ({
+      version,
+      bucket: `outbound/${bucket}`,
+      name,
+    }));
+  }),
+);
+
+describe('conformance corpus — outbound (validateOutbound)', () => {
+  it('has cases', () => {
+    expect(OUTBOUND_CASES.length).toBeGreaterThan(0);
+  });
+
+  for (const { version, bucket, name } of OUTBOUND_CASES) {
+    it(`${version}/${bucket}/${name}`, () => {
+      const src = source(version, bucket, name);
+      const expected = expectation(version, bucket, name);
+      expect(validateStructure(parse(src)).valid).toBe(expected.structurallyValid);
+
+      const parsed = parseFlow(src);
+      const issues = [...parsed.issues];
+      if (parsed.flow) issues.push(...validateOutbound(parsed.flow, parsed.nodeRanges));
+      expect(!hasErrors(issues), JSON.stringify(issues.map((i) => i.code))).toBe(
+        expected.semantic.ok,
+      );
+      const reported = new Set(issues.map((issue) => issue.code));
+      for (const code of expected.semantic.errors) {
+        expect(reported, `expected outbound error "${code}" for ${bucket}/${name}`).toContain(code);
+      }
     });
   }
 });

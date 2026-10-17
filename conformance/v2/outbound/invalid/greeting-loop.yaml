@@ -1,0 +1,13 @@
+schema_version: 2
+id: flow_outbound_greeting_loop
+name: Says the same thing forever
+entry: one
+nodes:
+  one:
+    kind: greeting
+    prompt: Hello.
+    exits: { next: two }
+  two:
+    kind: greeting
+    prompt: Hello again.
+    exits: { next: one }

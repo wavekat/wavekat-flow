@@ -1,0 +1,12 @@
+schema_version: 2
+id: flow_outbound_transfer
+name: Outbound with a transfer step
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Connecting you now.
+    exits: { next: forward }
+  forward:
+    kind: transfer
+    target: "+15550100"

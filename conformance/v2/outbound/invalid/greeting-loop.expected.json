@@ -1,0 +1,5 @@
+{
+  "description": "Two greetings that hand off to each other: the loop never waits for the callee. Reported as an unbounded loop, alongside the base validator's `trapped` (nothing in it can end the call).",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_unbounded_loop", "trapped"] }
+}

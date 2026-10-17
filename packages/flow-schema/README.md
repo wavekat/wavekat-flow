@@ -29,6 +29,7 @@ that executes it.
 | `Flow`, `Node`, `Prompt`, … | Generated model types, plus hand-written helpers (`requiredExits`, `isTerminal`, `requiredAssets`, …) |
 | `checkFlow` | The one-call gate: safe-subset YAML parse + semantic validation |
 | `parseFlow` / `validateFlow` | The two halves of `checkFlow`, usable separately |
+| `validateOutbound` | `validateFlow` plus the rules for a call the app places itself (no `ring`, `book` or `transfer`; no loop that never waits for the callee) — call it instead of `validateFlow` for an outbound flow |
 | `validateStructure` / `flowV1Schema` | Structural (JSON Schema) validation via `ajv`, and the bundled schema itself |
 | `validateHours`, `isValidTimezone`, … | Business-hours / timezone checks |
 | `addNode`, `setExit`, `renameNode`, … | Comment-preserving YAML source edits (TS-only — the Rust side never edits) |

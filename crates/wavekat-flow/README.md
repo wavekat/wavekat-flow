@@ -67,6 +67,16 @@ if let Err(errors) = validate::validate(&flow) {
 }
 ```
 
+### Outbound calls
+
+A flow run on a call the app places — with no person standing by — goes
+through `validate::validate_outbound` instead. It runs `validate` first and
+adds the outbound rules, so call it on its own: only `greeting`, `menu`,
+`message`, `hangup` and `hours` steps are allowed
+(`outbound_node_not_allowed`), and no loop may be made only of steps that move
+on without the callee, such as a greeting that leads back to itself
+(`outbound_unbounded_loop`). A loop through a `menu` is fine.
+
 ## Upgrading when the booking grid moves
 
 `BOOK_GRANULARITY_MINS` decides which times a `book` node can ever say, so
