@@ -1,5 +1,6 @@
 # docs/
 
+- **[01-canonical-document.md](./01-canonical-document.md)**: making the document the whole truth: per-node `note`, ordered maps, one canonical serialization, and edits as parse → change → serialize.
 - **[ROADMAP.md](./ROADMAP.md)** — the phased TODO list (Phase 2 consolidation,
   Phase 3 publish & adopt, open questions). Start here for what's left to do.
 
