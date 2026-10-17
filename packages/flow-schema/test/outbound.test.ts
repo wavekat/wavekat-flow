@@ -111,6 +111,24 @@ nodes:
     ]);
   });
 
+  it('flags a menu whose no_input leads back into the loop', () => {
+    // Into voicemail, every attempt times out: hello -> ask -> hello ...
+    // `thanks` and `bye` can still end it, so the base check passes.
+    const src = REMINDER.replace('no_input: bye, invalid: ask', 'no_input: hello, invalid: bye');
+    expect(validateFlow(flowOf(src))).toEqual([]);
+    expect(
+      validateOutbound(flowOf(src)).map((issue) => [issue.code, issue.node]),
+    ).toEqual([
+      ['outbound_unbounded_loop', 'ask'],
+      ['outbound_unbounded_loop', 'hello'],
+    ]);
+  });
+
+  it('flags a menu retrying itself on no_input', () => {
+    const src = REMINDER.replace('no_input: bye, invalid: ask', 'no_input: ask, invalid: bye');
+    expect(outboundCodes(src)).toEqual(['outbound_unbounded_loop']);
+  });
+
   it('flags a greeting looping on itself', () => {
     const codes = outboundCodes(`
 schema_version: 1

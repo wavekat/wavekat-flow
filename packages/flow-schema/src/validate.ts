@@ -370,11 +370,12 @@ export const OUTBOUND_KINDS: readonly ComponentKind[] = [
  * The outbound rules:
  *
  * - every node is one of `OUTBOUND_KINDS` (`outbound_node_not_allowed`);
- * - no loop reachable from `entry` is made only of steps that move on
- *   without the callee (`greeting`, `hours`) — such a loop, played into
- *   voicemail or to a callee who stays silent, would never end
- *   (`outbound_unbounded_loop`). A loop through a `menu` is fine: the
- *   menu waits for the callee and its `no_input` exit is the way out.
+ * - no loop reachable from `entry` is made only of moves that happen
+ *   without the callee — any exit of a `greeting` or `hours` step, or a
+ *   `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
+ *   callee who stays silent, would never end (`outbound_unbounded_loop`).
+ *   A loop through a menu's digit or `invalid` exits is fine: only a
+ *   callee pressing keys can take it.
  *
  * Twin: `validate.rs` `validate_outbound`.
  */
@@ -409,24 +410,32 @@ export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue
   return issues;
 }
 
-/** Whether a node moves on without waiting for anything the callee does:
- * `greeting` always takes `next`; `hours` picks by the clock. */
-function movesOnByItself(kind: string | undefined): boolean {
-  return kind === 'greeting' || kind === 'hours';
+/** The exits a node takes without the callee doing anything: every exit of
+ * a `greeting` (always `next`) or `hours` step (picked by the clock), and a
+ * `menu`'s `no_input` (taken when nobody presses a key — voicemail, say). */
+function silentExits(node: Flow['nodes'][string] | undefined): string[] {
+  if (!node) return [];
+  const exits = Object.entries(node.exits ?? {});
+  switch (node.kind) {
+    case 'greeting':
+    case 'hours':
+      return exits.map(([, target]) => target);
+    case 'menu':
+      return exits.filter(([key]) => key === 'no_input').map(([, target]) => target);
+    default:
+      return [];
+  }
 }
 
 /** Every node reachable from `entry` that sits on a cycle made only of
- * nodes that move on by themselves, in id order. */
+ * silent exits (see `silentExits`), in id order. */
 function unboundedLoopNodes(flow: Flow): string[] {
   const reachable = reachableFromEntry(flow);
-  const inScope = (id: string): boolean =>
-    reachable.has(id) && movesOnByItself(flow.nodes[id]?.kind);
   const successors = (id: string): string[] =>
-    Object.values(flow.nodes[id]?.exits ?? {}).filter(inScope);
+    silentExits(flow.nodes[id]).filter((target) => reachable.has(target));
 
   const onLoop: string[] = [];
   for (const id of [...reachable].sort()) {
-    if (!inScope(id)) continue;
     // Does `id` lead back to itself within the subgraph?
     const seen = new Set<string>();
     const stack = successors(id);

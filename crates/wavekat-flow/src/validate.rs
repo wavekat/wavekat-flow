@@ -255,11 +255,12 @@ pub const OUTBOUND_KINDS: &[&str] = &["greeting", "menu", "message", "hangup", "
 /// The outbound rules:
 ///
 /// - every node is one of [`OUTBOUND_KINDS`] (`outbound_node_not_allowed`);
-/// - no loop reachable from `entry` is made only of steps that move on
-///   without the callee (`greeting`, `hours`) — such a loop, played into
-///   voicemail or to a callee who stays silent, would never end
-///   (`outbound_unbounded_loop`). A loop through a `menu` is fine: the
-///   menu waits for the callee and its `no_input` exit is the way out.
+/// - no loop reachable from `entry` is made only of moves that happen
+///   without the callee — any exit of a `greeting` or `hours` step, or a
+///   `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
+///   callee who stays silent, would never end (`outbound_unbounded_loop`).
+///   A loop through a menu's digit or `invalid` exits is fine: only a
+///   callee pressing keys can take it.
 ///
 /// Twin: `validate.ts` `validateOutbound`.
 pub fn validate_outbound(flow: &Flow) -> Result<(), Vec<ValidationError>> {
@@ -290,34 +291,39 @@ pub fn validate_outbound(flow: &Flow) -> Result<(), Vec<ValidationError>> {
     }
 }
 
-/// Whether a node moves on without waiting for anything the callee does.
-/// `greeting` always takes `next`; `hours` picks by the clock.
-fn moves_on_by_itself(node: &Node) -> bool {
-    matches!(node, Node::Greeting { .. } | Node::Hours { .. })
+/// The exits a node takes without the callee doing anything: every exit of
+/// a `greeting` (always `next`) or `hours` step (picked by the clock), and a
+/// `menu`'s `no_input` (taken when nobody presses a key — voicemail, say).
+fn silent_exits(node: &Node) -> Vec<&str> {
+    let exits = node.exits().into_iter().flatten();
+    match node {
+        Node::Greeting { .. } | Node::Hours { .. } => exits.map(|(_, t)| t.as_str()).collect(),
+        Node::Menu { .. } => exits
+            .filter(|(key, _)| key.as_str() == "no_input")
+            .map(|(_, t)| t.as_str())
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Every node reachable from `entry` that sits on a cycle made only of
-/// nodes that move on by themselves, in id order.
+/// silent exits (see [`silent_exits`]), in id order.
 fn unbounded_loop_nodes(flow: &Flow) -> Vec<&str> {
     let reachable = reachable_from_entry(flow);
-    // The subgraph the rule is about: reachable, self-advancing nodes and
-    // the edges between them.
+    // The subgraph the rule is about: reachable nodes and the silent exits
+    // between them.
     let successors = |id: &str| -> Vec<&str> {
         flow.nodes
             .get(id)
-            .and_then(Node::exits)
+            .map(silent_exits)
+            .unwrap_or_default()
             .into_iter()
-            .flatten()
-            .map(|(_, t)| t.as_str())
-            .filter(|t| reachable.contains(t) && flow.nodes.get(*t).is_some_and(moves_on_by_itself))
+            .filter(|t| reachable.contains(t))
             .collect()
     };
 
     let mut on_loop = Vec::new();
     for id in &reachable {
-        if !flow.nodes.get(*id).is_some_and(moves_on_by_itself) {
-            continue;
-        }
         // Does `id` lead back to itself within the subgraph?
         let mut seen: BTreeSet<&str> = BTreeSet::new();
         let mut stack = successors(id);
@@ -1047,6 +1053,33 @@ nodes:
                 ValidationError::OutboundUnboundedLoop { node: "say".into() },
             ]
         );
+    }
+
+    #[test]
+    fn a_menu_whose_no_input_loops_back_is_unbounded() {
+        // Into voicemail, every attempt times out: hello -> ask -> hello ...
+        // `thanks` and `bye` can still end it, so the base check passes.
+        let src = REMINDER.replace(
+            "no_input: bye, invalid: ask",
+            "no_input: hello, invalid: bye",
+        );
+        assert_eq!(validate(&parse(&src)), Ok(()));
+        let errs = validate_outbound(&parse(&src)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![
+                ValidationError::OutboundUnboundedLoop { node: "ask".into() },
+                ValidationError::OutboundUnboundedLoop {
+                    node: "hello".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_menu_retrying_itself_on_no_input_is_unbounded() {
+        let src = REMINDER.replace("no_input: bye, invalid: ask", "no_input: ask, invalid: bye");
+        assert_eq!(outbound_codes(&src), vec!["outbound_unbounded_loop"]);
     }
 
     #[test]

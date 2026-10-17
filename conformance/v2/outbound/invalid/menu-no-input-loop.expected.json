@@ -1,0 +1,5 @@
+{
+  "description": "The menu's no_input exit leads back to the greeting, so with nobody pressing keys (voicemail) hello -> ask -> hello never ends. Pressing 1 or an unmapped key still ends the call, so the base validator accepts it — a loop through a menu is only safe on its digit exits.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_unbounded_loop"] }
+}
