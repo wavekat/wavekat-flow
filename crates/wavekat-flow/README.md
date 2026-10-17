@@ -29,6 +29,7 @@ this crate.
 |--------|--------------|
 | `model` (re-exported at root) | Generated document types (`Flow`, `Node`, `Prompt`, …) plus hand-written helpers (`Flow::from_yaml`, `Node::exits`, …) |
 | `validate` | Semantic validation: reachability, caller traps, exit-set exactness, DTMF and prompt rules |
+| `source` | Find and rewrite prompts in a document's YAML text without disturbing comments or layout: voice text prompts as clips, swap local recordings for uploaded clips |
 | `hours` | Business-hours / timezone math (IANA zones, holiday exceptions) |
 | `engine` | The flow interpreter + the `FlowEffects` async trait your runtime implements |
 | `trace` | Serializable run traces emitted by the engine |
@@ -97,8 +98,8 @@ meantime, which is the safe direction.
 
 ## One format, two languages
 
-This crate is the Rust half of the format. Authoring, comment-preserving
-edits, and the TypeScript twin of the validator live in
+This crate is the Rust half of the format. General-purpose comment-preserving
+edits (rename, add or remove a node, rewire an exit) and the TypeScript twin of the validator live in
 [`@wavekat/flow-schema`](https://www.npmjs.com/package/@wavekat/flow-schema).
 The schema, the shared conformance corpus, and the full design rationale live
 in the [`wavekat-flow` repository](https://github.com/wavekat/wavekat-flow).

@@ -11,7 +11,9 @@
 //! [`trace`] output) alongside the generated model, adapted to the generated
 //! types and pinned by the shared conformance corpus. The engine owns the
 //! [`engine::FlowEffects`] trait *definition*; the daemon keeps its live impl
-//! in its own codebase. Comment-preserving mutation stays TS-only.
+//! in its own codebase. [`source`] finds and rewrites prompts in a document's text without
+//! disturbing comments or layout, for Rust authoring tools; the TS side's
+//! general-purpose comment-preserving edits stay in `mutate.ts`.
 
 /// The generated document model (`Flow`, `Node`, `Prompt`, …), emitted
 /// from the schema by `typify` into `OUT_DIR/flow_types.rs`.
@@ -32,11 +34,15 @@ mod model_ext;
 pub mod book;
 pub mod engine;
 pub mod hours;
+pub mod source;
 pub mod trace;
 pub mod validate;
 
 pub use model::*;
-pub use model_ext::{required_assets, NodeId};
+pub use model_ext::{
+    is_generated_clip_ref, is_local_audio_ref, prompt_fields, required_assets, NodeId,
+    PROMPT_FIELDS,
+};
 
 /// The normative JSON Schema (draft 2020-12) for format version 1, as a
 /// string, bundled so consumers can run structural validation without

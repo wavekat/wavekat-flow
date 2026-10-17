@@ -21,6 +21,12 @@ anyhow = "1"
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `source` edits a document's text in place, so it needs each value's
+# position, which serde_yaml_ng doesn't expose. Only the event parser is
+# used (pure Rust, two small deps). Pinned: 0.2.2's markers count chars,
+# not the bytes its docs say, and `source` relies on that (its non-ASCII
+# tests catch a change).
+saphyr-parser = "=0.2.2"
 serde_yaml_ng = "0.10"
 thiserror = "2"
 time = { version = "0.3", features = ["macros", "parsing"] }
