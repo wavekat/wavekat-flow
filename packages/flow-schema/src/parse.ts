@@ -13,7 +13,7 @@
 // at; warnings don't block publish, so both sides still accept the
 // same set of documents.
 
-import { isMap, isScalar, isSeq, parseDocument, visit } from 'yaml';
+import { Lexer, isMap, isScalar, isSeq, parseDocument, visit } from 'yaml';
 import type { Pair, Scalar, YAMLMap } from 'yaml';
 
 import type {
@@ -60,6 +60,40 @@ type Field = { key: Scalar; value: unknown };
 function rangeOf(node: unknown): [number, number] | undefined {
   const r = (node as { range?: [number, number, number] | null } | null | undefined)?.range;
   return r ? [r[0], r[1]] : undefined;
+}
+
+/** A YAML comment in a source. */
+export type Comment = {
+  /** 1-based line number. */
+  line: number;
+  /** The words after `#`, trimmed. */
+  text: string;
+  /** Source range of the whole comment, `#` included. */
+  range: [number, number];
+};
+
+/**
+ * Every comment in `source`, in order. Comments carry no meaning in a flow
+ * document (docs/01-canonical-document.md §2): the words belong in `note`,
+ * and saving drops them. Twin: `edit.rs` `comments`; the corpus under
+ * `conformance/canonical/` pins the count for both.
+ */
+export function findComments(source: string): Comment[] {
+  const out: Comment[] = [];
+  let offset = 0;
+  let line = 1;
+  for (const token of new Lexer().lex(source)) {
+    if (token.startsWith('#')) {
+      out.push({
+        line,
+        text: token.slice(1).trim(),
+        range: [offset, offset + token.length],
+      });
+    }
+    offset += token.length;
+    for (const ch of token) if (ch === '\n') line += 1;
+  }
+  return out;
 }
 
 function error(issues: Issue[], code: string, message: string, at?: unknown): void {
@@ -490,10 +524,13 @@ function decodeNode(id: string, value: unknown, issues: Issue[]): FlowNode | und
 
   warnUnknownFields(
     fields,
-    ['kind', 'exits', ...(NODE_CONFIG_FIELDS[kind] ?? [])],
+    ['kind', 'note', 'exits', ...(NODE_CONFIG_FIELDS[kind] ?? [])],
     context,
     issues,
   );
+  const noteField = fields.get('note');
+  const note = noteField ? asString(noteField.value, `${context} note`, issues) : undefined;
+  if (noteField && note === undefined) return undefined;
 
   const exits: Record<string, string> = {};
   const exitsField = fields.get('exits');
@@ -509,7 +546,8 @@ function decodeNode(id: string, value: unknown, issues: Issue[]): FlowNode | und
   }
 
   const component = decodeComponent(kind, id, fields, value, issues);
-  return component === undefined ? undefined : { ...component, exits };
+  if (component === undefined) return undefined;
+  return note === undefined ? { ...component, exits } : { ...component, note, exits };
 }
 
 /**
@@ -557,6 +595,14 @@ export function parseFlow(source: string): ParseResult {
     Seq: (_key, node) => rejectUnsafe(node),
   });
   if (hasErrors(issues)) return { flow: null, issues, nodeRanges };
+  for (const comment of findComments(source)) {
+    issues.push({
+      severity: 'warning',
+      code: 'comment_ignored',
+      message: 'comments are not part of the flow and are dropped on save; put the words in a `note`',
+      range: comment.range,
+    });
+  }
 
   const root = doc.contents;
   if (!isMap(root)) {
@@ -568,7 +614,7 @@ export function parseFlow(source: string): ParseResult {
   const fields = fieldsOf(root, 'flow document', issues);
   warnUnknownFields(
     fields,
-    ['schema_version', 'id', 'name', 'version', 'entry', 'nodes', 'ui'],
+    ['schema_version', 'id', 'name', 'version', 'note', 'entry', 'nodes', 'ui'],
     'flow document',
     issues,
   );
@@ -582,6 +628,8 @@ export function parseFlow(source: string): ParseResult {
   const name = nameField && asString(nameField.value, 'name', issues);
   const versionField = fields.get('version');
   const version = versionField ? asU32(versionField.value, 'version', issues) : 1;
+  const noteField = fields.get('note');
+  const note = noteField ? asString(noteField.value, 'note', issues) : undefined;
   const entryField = required(fields, 'entry', 'flow document', issues, root);
   const entry = entryField && asString(entryField.value, 'entry', issues);
 
@@ -629,6 +677,7 @@ export function parseFlow(source: string): ParseResult {
       id,
       name,
       version,
+      ...(note === undefined ? {} : { note }),
       entry,
       nodes,
       ui: ui as Flow['ui'],

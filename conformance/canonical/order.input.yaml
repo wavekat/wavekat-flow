@@ -1,0 +1,21 @@
+nodes:
+  start:
+    exits: { next: pick }
+    prompt: Welcome.
+    note: First thing a caller hears.
+    kind: greeting
+  pick:
+    options: { "2": Support, "1": Sales, "0": Operator, "*": Repeat, "#": Exit }
+    exits: { invalid: start, "#": start, "*": start, "2": start, no_input: start, "0": start, "1": start }
+    kind: menu
+    prompt: Choose.
+  "10":
+    kind: hangup
+  "2":
+    kind: hangup
+entry: start
+note: Order of nodes is the author's; integer ids go first.
+name: Order
+version: 3
+id: flow_order
+schema_version: 1

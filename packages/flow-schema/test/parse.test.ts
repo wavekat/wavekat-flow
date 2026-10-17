@@ -294,3 +294,59 @@ nodes:
     expect(source.slice(range![0], range![0] + 'night_menu'.length)).toBe('night_menu');
   });
 });
+
+describe('notes and comments', () => {
+  const SRC = `# about this flow
+schema_version: 1
+id: flow_n
+name: Notes
+note: Reviewed in May.
+entry: hi
+nodes:
+  hi:
+    kind: hangup
+    note: Owner recorded this. # trailing
+    prompt: Bye.
+`;
+
+  it('decodes note on the flow and on a node, with no unknown-field warning', () => {
+    const { flow, issues } = parseFlow(SRC);
+    expect(flow?.note).toBe('Reviewed in May.');
+    expect(flow?.nodes['hi']?.note).toBe('Owner recorded this.');
+    expect(issues.map((i) => i.code)).not.toContain('unknown_field');
+  });
+
+  it('reports each comment as comment_ignored, with its range', () => {
+    const comments = parseFlow(SRC).issues.filter((i) => i.code === 'comment_ignored');
+    expect(comments).toHaveLength(2);
+    expect(comments.every((c) => c.severity === 'warning')).toBe(true);
+    const [first] = comments;
+    expect(first && SRC.slice(first.range?.[0], first.range?.[1])).toBe('# about this flow');
+  });
+
+  it('a note must be text', () => {
+    const { flow, issues } = parseFlow(SRC.replace('note: Reviewed in May.', 'note: [x]'));
+    expect(flow).toBeNull();
+    expect(issues.map((i) => i.code)).toContain('expected_string');
+  });
+});
+
+describe('known fields follow the schema', () => {
+  // The decoder lists each kind's fields by hand; the schema is the source
+  // of truth. A field added to the schema but not here would decode as
+  // unknown and block every edit.
+  it('every node kind knows exactly its schema properties', async () => {
+    const { flowV2Schema } = await import('../src/generated/schema.js');
+    const defs = (flowV2Schema as unknown as { $defs: Record<string, { properties?: Record<string, { const?: string }> }> }).$defs;
+    for (const def of Object.values(defs)) {
+      const kind = def.properties?.['kind']?.const;
+      if (!kind) continue;
+      const src = `schema_version: 2\nid: f\nname: F\nentry: a\nnodes:\n  a:\n${Object.keys(def.properties ?? {})
+        .filter((p) => p !== 'kind')
+        .map((p) => `    ${p}: x\n`)
+        .join('')}    kind: ${kind}\n`;
+      const unknown = parseFlow(src).issues.filter((i) => i.code === 'unknown_field');
+      expect(unknown, kind).toEqual([]);
+    }
+  });
+});

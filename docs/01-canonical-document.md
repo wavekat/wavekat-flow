@@ -113,8 +113,9 @@ the two libraries don't agree. The rules:
 
 **Layout.**
 - The document and each node are block mappings, indented two spaces.
-- Below a node (and inside `ui`), a map or list whose entries are **all
-  scalars** is written in flow style on one line:
+- Any other map or list (below a node, and inside `ui`) whose written
+  entries, after the omissions above, are **all scalars** is written in
+  flow style on one line:
   `exits: { next: bye }`, `options: { "1": Sales }`,
   `prompt: { audio: vprompt_a1, transcript: Hi }`,
   `- { open: "09:00", close: "17:00" }`, `welcome: [120, 40]`. An empty

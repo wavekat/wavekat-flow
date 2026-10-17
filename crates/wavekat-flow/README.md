@@ -29,6 +29,8 @@ this crate.
 |--------|--------------|
 | `model` (re-exported at root) | Generated document types (`Flow`, `Node`, `Prompt`, …) plus hand-written helpers (`Flow::from_yaml`, `Node::exits`, …) |
 | `validate` | Semantic validation: reachability, caller traps, exit-set exactness, DTMF and prompt rules |
+| `edit` | Load a document to edit it: `edit::load` refuses unknown fields (a save would delete them) and unsupported versions, and returns the YAML comments a save drops; `edit::load_draft` fills a new draft's missing `id`/`name` |
+| `Flow::to_yaml` | The canonical text of a flow, byte for byte what the TypeScript `serializeFlow` writes. Edit by parsing, changing the flow, and calling this |
 | `hours` | Business-hours / timezone math (IANA zones, holiday exceptions) |
 | `engine` | The flow interpreter + the `FlowEffects` async trait your runtime implements |
 | `trace` | Serializable run traces emitted by the engine |
@@ -97,8 +99,9 @@ meantime, which is the safe direction.
 
 ## One format, two languages
 
-This crate is the Rust half of the format. Authoring, comment-preserving
-edits, and the TypeScript twin of the validator live in
+This crate is the Rust half of the format. The structured edit operations the
+web editor uses, and the TypeScript twins of the validator and the canonical
+serializer, live in
 [`@wavekat/flow-schema`](https://www.npmjs.com/package/@wavekat/flow-schema).
 The schema, the shared conformance corpus, and the full design rationale live
 in the [`wavekat-flow` repository](https://github.com/wavekat/wavekat-flow).

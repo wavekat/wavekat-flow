@@ -71,8 +71,14 @@ fn main() {
     let schema: schemars::schema::RootSchema =
         serde_json::from_value(value).expect("schema into RootSchema");
 
-    let mut type_space =
-        typify::TypeSpace::new(typify::TypeSpaceSettings::default().with_struct_builder(false));
+    // Every map is an `IndexMap`: the order nodes, exits and options are
+    // written in is the author's, and the canonical serialization keeps it
+    // (docs/01-canonical-document.md §3).
+    let mut type_space = typify::TypeSpace::new(
+        typify::TypeSpaceSettings::default()
+            .with_struct_builder(false)
+            .with_map_type("::indexmap::IndexMap"),
+    );
     type_space
         .add_root_schema(schema)
         .expect("typify add_root_schema");

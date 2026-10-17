@@ -1,0 +1,32 @@
+schema_version: 1
+id: flow_scalars
+name: "Quotes: only where needed"
+entry: a
+nodes:
+  a:
+    kind: greeting
+    note: "yes"
+    prompt: Thanks for calling, how can we help?
+    exits: { next: b }
+  b:
+    kind: menu
+    prompt: "It's 9: press 1 or # for more"
+    options: { "1": "Sales, new orders", "2": Plain label }
+    exits: { "1": c, "2": c, no_input: c, invalid: c }
+  c:
+    kind: message
+    note: " leading space"
+    prompt: "Please leave a message\nafter the tone.\n"
+    exits: { next: d }
+  d:
+    kind: hours
+    schedule:
+      mon:
+        - { open: "09:00", close: "17:00" }
+    timezone: America/New_York
+    exceptions:
+      - { date: "2026-12-25", closed: true }
+    exits: { open: e, closed: e }
+  e:
+    kind: hangup
+    prompt: "Goodbye — 再见.\tTab, \"quotes\" and a backslash \\"

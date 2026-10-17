@@ -34,12 +34,16 @@ export const flowV1Schema = {
       "minimum": 0,
       "default": 1
     },
+    "note": {
+      "description": "The author's note about the whole flow: free text for people reading it, in place of a YAML comment. Never read by the engine.",
+      "type": "string"
+    },
     "entry": {
       "description": "Node id where execution begins.",
       "type": "string"
     },
     "nodes": {
-      "description": "The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution.",
+      "description": "The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution, but it is the author's reading order and is kept on save.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/Node"
@@ -216,6 +220,10 @@ export const flowV1Schema = {
         "kind": {
           "const": "greeting"
         },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
+        },
         "prompt": {
           "$ref": "#/$defs/Prompt"
         },
@@ -235,6 +243,10 @@ export const flowV1Schema = {
       "properties": {
         "kind": {
           "const": "hours"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "schedule": {
           "$ref": "#/$defs/WeeklySchedule"
@@ -265,6 +277,10 @@ export const flowV1Schema = {
       "properties": {
         "kind": {
           "const": "menu"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"
@@ -302,6 +318,10 @@ export const flowV1Schema = {
         "kind": {
           "const": "ring"
         },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
+        },
         "timeout_secs": {
           "type": "integer",
           "minimum": 0
@@ -321,6 +341,10 @@ export const flowV1Schema = {
       "properties": {
         "kind": {
           "const": "message"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"
@@ -354,6 +378,10 @@ export const flowV1Schema = {
         "kind": {
           "const": "transfer"
         },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
+        },
         "target": {
           "type": "string"
         },
@@ -371,6 +399,10 @@ export const flowV1Schema = {
       "properties": {
         "kind": {
           "const": "hangup"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"
@@ -416,12 +448,16 @@ export const flowV2Schema = {
       "minimum": 0,
       "default": 1
     },
+    "note": {
+      "description": "The author's note about the whole flow: free text for people reading it, in place of a YAML comment. Never read by the engine.",
+      "type": "string"
+    },
     "entry": {
       "description": "Node id where execution begins.",
       "type": "string"
     },
     "nodes": {
-      "description": "The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution.",
+      "description": "The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution, but it is the author's reading order and is kept on save.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/Node"
@@ -601,6 +637,10 @@ export const flowV2Schema = {
         "kind": {
           "const": "greeting"
         },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
+        },
         "prompt": {
           "$ref": "#/$defs/Prompt"
         },
@@ -620,6 +660,10 @@ export const flowV2Schema = {
       "properties": {
         "kind": {
           "const": "hours"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "schedule": {
           "$ref": "#/$defs/WeeklySchedule"
@@ -650,6 +694,10 @@ export const flowV2Schema = {
       "properties": {
         "kind": {
           "const": "menu"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"
@@ -687,6 +735,10 @@ export const flowV2Schema = {
         "kind": {
           "const": "ring"
         },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
+        },
         "timeout_secs": {
           "type": "integer",
           "minimum": 0
@@ -706,6 +758,10 @@ export const flowV2Schema = {
       "properties": {
         "kind": {
           "const": "message"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"
@@ -739,6 +795,10 @@ export const flowV2Schema = {
         "kind": {
           "const": "transfer"
         },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
+        },
         "target": {
           "type": "string"
         },
@@ -756,6 +816,10 @@ export const flowV2Schema = {
       "properties": {
         "kind": {
           "const": "hangup"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"
@@ -779,6 +843,10 @@ export const flowV2Schema = {
       "properties": {
         "kind": {
           "const": "book"
+        },
+        "note": {
+          "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.",
+          "type": "string"
         },
         "prompt": {
           "$ref": "#/$defs/Prompt"

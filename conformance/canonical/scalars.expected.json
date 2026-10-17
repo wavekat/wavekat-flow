@@ -1,0 +1,4 @@
+{
+  "description": "Plain where the string can't be misread, double-quoted otherwise: reserved words, times, dates, leading digits, `: ` and ` #`, leading or trailing spaces, flow indicators in flow style, and anything needing an escape. Multi-line text becomes one double-quoted line.",
+  "comments": 0
+}

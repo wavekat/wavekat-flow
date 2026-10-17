@@ -4,8 +4,9 @@
 // hand-written authoring logic consolidated here in Phase 2: safe-subset
 // YAML parsing/decoding, semantic validation (reachability, exit wiring,
 // hours math, DTMF/prompt rules), the one-call `checkFlow` gate, and
-// comment-preserving source edits (`mutate.ts`, TS-only — the daemon never
-// edits). The model *helpers* (`requiredExits`, `isTerminal`, …) are
+// structured edits (`mutate.ts`: parse → change the model → the canonical
+// text from `serializeFlow`, identical to the Rust crate's `Flow::to_yaml`).
+// The model *helpers* (`requiredExits`, `isTerminal`, …) are
 // hand-written twins layered on the generated types — logic, not shape
 // (see `src/model.ts`). Import paths are kept identical to the platform's
 // in-repo copy so the Phase 3 swap is a dependency change, not a code
@@ -37,13 +38,15 @@ export { diffFlows } from './diff.js';
 export type { Issue } from './issues.js';
 export { MISSING_ASSET, hasErrors } from './issues.js';
 export type { ParseResult } from './parse.js';
-export { parseFlow } from './parse.js';
+export type { Comment } from './parse.js';
+export { findComments, parseFlow } from './parse.js';
+export { serializeFlow } from './serialize.js';
 export { OUTBOUND_KINDS, validateFlow, validateOutbound } from './validate.js';
 export type { FlowCheck } from './check.js';
 export { checkFlow } from './check.js';
 export { isValidDate, isValidTimezone, parseTimeMinutes, validateHours } from './hours.js';
 
-// Comment-preserving source edits (TS-only).
+// Structured edits: parse → change the model → serialize (canonical text).
 export type { EditError, EditResult } from './mutate.js';
 export {
   NODE_ID_PATTERN,

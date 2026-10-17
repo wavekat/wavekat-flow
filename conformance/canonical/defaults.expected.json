@@ -1,0 +1,4 @@
+{
+  "description": "Optional fields equal to their schema default, and empty optional maps and lists, are left out; required ones are written even when empty (`schedule: {}`).",
+  "comments": 0
+}

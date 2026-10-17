@@ -1,22 +1,43 @@
-// Structured, comment-preserving edits to a flow document's *source
-// text*. The YAML text is the single source of truth (doc 48: "one
-// document, many faces") — the form face and the API don't keep a
-// parallel model, they rewrite the text through these ops, which go
-// through the yaml Document API so comments, key order, and the
-// engine-opaque `ui` block survive untouched.
+// Structured edits to a flow document. The YAML text is the single source
+// of truth, and everything in it that matters is in the model (doc 01:
+// "the document is the whole truth"), so every op is
 //
-// TS-only: the daemon never edits documents, so there is no Rust twin.
-// These ops work on the `yaml` CST, not the generated model types.
+//   parseFlow → change the decoded flow → serializeFlow
 //
-// Every op is stateless: source in, source out. Documents are a few KB
-// at most, so re-parsing per edit is well inside interaction budgets.
+// and the result is the canonical text, the same bytes the Rust crate's
+// `Flow::to_yaml` writes. Comments carry no meaning and are not kept (the
+// words belong in `note`); `parseFlow` reports them as `comment_ignored`
+// so an editor can warn first.
+//
+// Every op is stateless: source in, source out. Documents are a few KB at
+// most, so re-parsing per edit is well inside interaction budgets.
 
-import { isMap, isScalar, parseDocument } from 'yaml';
-import type { Document, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
+import { parseDocument } from 'yaml';
 
-import type { ComponentKind } from './model.js';
+import type { ComponentKind, Flow, FlowNode } from './model.js';
+import { SUPPORTED_SCHEMA_VERSIONS } from './model.js';
+import { parseFlow } from './parse.js';
+import { serializeFlow } from './serialize.js';
 
-export type EditError = 'parse_failed' | 'invalid_node_id' | 'duplicate_node_id' | 'unknown_node';
+/**
+ * Why an edit was refused:
+ * - `parse_failed`: the text isn't YAML.
+ * - `invalid_document`: it's YAML, but doesn't decode as a flow (a menu
+ *   with no `options`, say); fix the YAML first. Validation problems, like
+ *   a missing exit, don't count: those documents decode and can be edited.
+ * - `unknown_field`: it has fields this version doesn't know, which a save
+ *   would delete.
+ * - `unsupported_version`: it declares a `schema_version` this version
+ *   can't write back.
+ */
+export type EditError =
+  | 'parse_failed'
+  | 'invalid_document'
+  | 'unknown_field'
+  | 'unsupported_version'
+  | 'invalid_node_id'
+  | 'duplicate_node_id'
+  | 'unknown_node';
 
 export type EditResult = { ok: true; source: string } | { ok: false; error: EditError };
 
@@ -27,47 +48,62 @@ export type EditResult = { ok: true; source: string } | { ok: false; error: Edit
  */
 export const NODE_ID_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
-function withDoc(
-  source: string,
-  edit: (doc: Document) => EditError | undefined,
-): EditResult {
-  const doc = parseDocument(source);
-  if (doc.errors.length > 0) return { ok: false, error: 'parse_failed' };
-  const error = edit(doc);
+type Json = { [key: string]: unknown };
+
+function isObject(v: unknown): v is Json {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function withFlow(source: string, edit: (flow: Flow) => EditError | undefined): EditResult {
+  const parsed = parseFlow(source);
+  if (!parsed.flow) {
+    const yaml = parsed.issues.some(
+      (i) => i.severity === 'error' && (i.code === 'yaml_error' || i.code === 'yaml_unsupported'),
+    );
+    return { ok: false, error: yaml ? 'parse_failed' : 'invalid_document' };
+  }
+  if (parsed.issues.some((i) => i.code === 'unknown_field')) {
+    return { ok: false, error: 'unknown_field' };
+  }
+  if (!SUPPORTED_SCHEMA_VERSIONS.includes(parsed.flow.schema_version)) {
+    return { ok: false, error: 'unsupported_version' };
+  }
+  const flow = structuredClone(parsed.flow);
+  const error = edit(flow);
   if (error) return { ok: false, error };
-  return { ok: true, source: doc.toString() };
+  return { ok: true, source: serializeFlow(flow) };
 }
 
-function nodesMap(doc: Document): YAMLMap | undefined {
-  const nodes = doc.get('nodes', true);
-  return isMap(nodes) ? nodes : undefined;
-}
-
-function findPair(map: YAMLMap, key: string): Pair | undefined {
-  return (map.items as Pair[]).find(
-    (pair) => isScalar(pair.key) && pair.key.value === key,
-  );
-}
-
-/** Rename a key in place (preserves the pair's comments and position). */
-function renameKey(map: YAMLMap | undefined, from: string, to: string): void {
-  if (!map) return;
-  const pair = findPair(map, from);
-  if (pair) (pair.key as Scalar).value = to;
+/** `nodes` with one key renamed in place, keeping every other key's order. */
+function renameKey<T>(map: Record<string, T>, from: string, to: string): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [k, v] of Object.entries(map)) out[k === from ? to : k] = v;
+  return out;
 }
 
 /** The `ui` block spots that may be keyed by node id. Opaque to the
  * engine, but a rename/delete that leaves stale ids behind would leak
  * one node's position onto another once the id is reused. */
-function uiMaps(doc: Document): YAMLMap[] {
-  const ui = doc.get('ui', true);
-  if (!isMap(ui)) return [];
+function uiMaps(flow: Flow): Json[] {
+  const ui = flow.ui as unknown;
+  if (!isObject(ui)) return [];
   const maps = [ui];
   for (const key of ['nodes', 'positions']) {
-    const sub = ui.get(key, true);
-    if (isMap(sub)) maps.push(sub);
+    const sub = ui[key];
+    if (isObject(sub)) maps.push(sub);
   }
   return maps;
+}
+
+/** Replace the contents of `target` with `next`, in `next`'s order. */
+function replaceContents(target: Json, next: Json): void {
+  for (const k of Object.keys(target)) delete target[k];
+  Object.assign(target, next);
+}
+
+function exitsOf(node: FlowNode): Record<string, string> {
+  if (!node.exits) node.exits = {};
+  return node.exits as Record<string, string>;
 }
 
 /**
@@ -76,25 +112,22 @@ function uiMaps(doc: Document): YAMLMap[] {
  */
 export function renameNode(source: string, from: string, to: string): EditResult {
   if (!NODE_ID_PATTERN.test(to)) return { ok: false, error: 'invalid_node_id' };
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    const pair = nodes && findPair(nodes, from);
-    if (!nodes || !pair) return 'unknown_node';
-    if (from !== to && findPair(nodes, to)) return 'duplicate_node_id';
+  return withFlow(source, (flow) => {
+    if (!Object.hasOwn(flow.nodes, from)) return 'unknown_node';
+    if (from !== to && Object.hasOwn(flow.nodes, to)) return 'duplicate_node_id';
 
-    (pair.key as Scalar).value = to;
-    if (doc.get('entry') === from) doc.set('entry', to);
-    for (const nodePair of nodes.items as Pair[]) {
-      if (!isMap(nodePair.value)) continue;
-      const exits = nodePair.value.get('exits', true);
-      if (!isMap(exits)) continue;
-      for (const exitPair of exits.items as Pair[]) {
-        if (isScalar(exitPair.value) && exitPair.value.value === from) {
-          exitPair.value.value = to;
-        }
+    flow.nodes = renameKey(flow.nodes, from, to);
+    if (flow.entry === from) flow.entry = to;
+    for (const node of Object.values(flow.nodes)) {
+      const exits = node.exits as Record<string, string> | undefined;
+      if (!exits) continue;
+      for (const [name, target] of Object.entries(exits)) {
+        if (target === from) exits[name] = to;
       }
     }
-    for (const map of uiMaps(doc)) renameKey(map, from, to);
+    for (const map of uiMaps(flow)) {
+      if (Object.hasOwn(map, from)) replaceContents(map, renameKey(map, from, to));
+    }
     return undefined;
   });
 }
@@ -106,21 +139,17 @@ export function renameNode(source: string, from: string, to: string): EditResult
  * `entry` is left for validation to flag.
  */
 export function removeNode(source: string, id: string): EditResult {
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    if (!nodes || !findPair(nodes, id)) return 'unknown_node';
-    nodes.delete(id);
-    for (const nodePair of nodes.items as Pair[]) {
-      if (!isMap(nodePair.value)) continue;
-      const exits = nodePair.value.get('exits', true);
-      if (!isMap(exits)) continue;
-      const stale = (exits.items as Pair[])
-        .filter((exitPair) => isScalar(exitPair.value) && exitPair.value.value === id)
-        .map((exitPair) => (exitPair.key as Scalar).value);
-      for (const name of stale) exits.delete(name);
-      if (exits.items.length === 0) nodePair.value.delete('exits');
+  return withFlow(source, (flow) => {
+    if (!Object.hasOwn(flow.nodes, id)) return 'unknown_node';
+    delete flow.nodes[id];
+    for (const node of Object.values(flow.nodes)) {
+      const exits = node.exits as Record<string, string> | undefined;
+      if (!exits) continue;
+      for (const [name, target] of Object.entries(exits)) {
+        if (target === id) delete exits[name];
+      }
     }
-    for (const map of uiMaps(doc)) map.delete(id);
+    for (const map of uiMaps(flow)) delete map[id];
     return undefined;
   });
 }
@@ -128,54 +157,38 @@ export function removeNode(source: string, id: string): EditResult {
 /** Insert a new node built from a plain JS shape (see `defaultNode`). */
 export function addNode(source: string, id: string, node: Record<string, unknown>): EditResult {
   if (!NODE_ID_PATTERN.test(id)) return { ok: false, error: 'invalid_node_id' };
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    if (nodes && findPair(nodes, id)) return 'duplicate_node_id';
-    const created = doc.createNode(node);
-    // Inline the small maps the same way the documented examples write
-    // them: `exits: { next: bye }`, `prompt: { audio: welcome }`.
-    if (isMap(created)) {
-      for (const key of ['exits', 'options', 'prompt']) {
-        const sub = created.get(key, true);
-        if (isMap(sub)) sub.flow = true;
-      }
-    }
-    doc.setIn(['nodes', id], created);
+  return withFlow(source, (flow) => {
+    if (Object.hasOwn(flow.nodes, id)) return 'duplicate_node_id';
+    flow.nodes[id] = structuredClone(node) as unknown as FlowNode;
     return undefined;
   });
 }
 
 /** Point the flow's `entry` at an existing node. */
 export function setEntry(source: string, id: string): EditResult {
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    if (!nodes || !findPair(nodes, id)) return 'unknown_node';
-    doc.set('entry', id);
+  return withFlow(source, (flow) => {
+    if (!Object.hasOwn(flow.nodes, id)) return 'unknown_node';
+    flow.entry = id;
     return undefined;
   });
 }
 
 /** Wire (or rewire) one exit of a node. */
 export function setExit(source: string, id: string, exit: string, target: string): EditResult {
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    if (!nodes || !findPair(nodes, id)) return 'unknown_node';
-    doc.setIn(['nodes', id, 'exits', exit], target);
+  return withFlow(source, (flow) => {
+    const node = flow.nodes[id];
+    if (!node) return 'unknown_node';
+    exitsOf(node)[exit] = target;
     return undefined;
   });
 }
 
-/** Remove one exit of a node (dropping an empty `exits` map entirely). */
+/** Remove one exit of a node. */
 export function removeExit(source: string, id: string, exit: string): EditResult {
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    const pair = nodes && findPair(nodes, id);
-    if (!nodes || !pair) return 'unknown_node';
-    doc.deleteIn(['nodes', id, 'exits', exit]);
-    if (isMap(pair.value)) {
-      const exits = pair.value.get('exits', true);
-      if (isMap(exits) && exits.items.length === 0) pair.value.delete('exits');
-    }
+  return withFlow(source, (flow) => {
+    const node = flow.nodes[id];
+    if (!node) return 'unknown_node';
+    delete exitsOf(node)[exit];
     return undefined;
   });
 }
@@ -183,6 +196,8 @@ export function removeExit(source: string, id: string, exit: string): EditResult
 /**
  * Set (or with `value === undefined`, delete) one config field of a
  * node — `['prompt']`, `['options', '2']`, `['schedule', 'mon']`, …
+ * Missing containers on the way are created: a map for a string key, a
+ * list for a number.
  */
 export function setNodeValue(
   source: string,
@@ -190,15 +205,26 @@ export function setNodeValue(
   path: (string | number)[],
   value: unknown,
 ): EditResult {
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    if (!nodes || !findPair(nodes, id)) return 'unknown_node';
+  return withFlow(source, (flow) => {
+    const node = flow.nodes[id];
+    if (!node) return 'unknown_node';
+    if (path.length === 0) return undefined;
+    let container: unknown = node;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const key = path[i] as string | number;
+      const holder = container as Record<string | number, unknown>;
+      if (holder[key] === null || typeof holder[key] !== 'object') {
+        if (value === undefined) return undefined;
+        holder[key] = typeof path[i + 1] === 'number' ? [] : {};
+      }
+      container = holder[key];
+    }
+    const last = path[path.length - 1] as string | number;
     if (value === undefined) {
-      doc.deleteIn(['nodes', id, ...path]);
+      if (Array.isArray(container) && typeof last === 'number') container.splice(last, 1);
+      else delete (container as Record<string | number, unknown>)[last];
     } else {
-      const wrapped =
-        value !== null && typeof value === 'object' ? doc.createNode(value) : value;
-      doc.setIn(['nodes', id, ...path], wrapped);
+      (container as Record<string | number, unknown>)[last] = structuredClone(value);
     }
     return undefined;
   });
@@ -212,22 +238,24 @@ export function setNodeValue(
  * keys in sync.
  */
 export function setNodePosition(source: string, id: string, x: number, y: number): EditResult {
-  return withDoc(source, (doc) => {
-    const nodes = nodesMap(doc);
-    if (!nodes || !findPair(nodes, id)) return 'unknown_node';
-    const position = doc.createNode([Math.round(x), Math.round(y)]) as YAMLSeq;
-    position.flow = true;
-    doc.setIn(['ui', 'positions', id], position);
+  return withFlow(source, (flow) => {
+    if (!Object.hasOwn(flow.nodes, id)) return 'unknown_node';
+    const ui: Json = isObject(flow.ui) ? (flow.ui as Json) : {};
+    const positions: Json = isObject(ui['positions']) ? (ui['positions'] as Json) : {};
+    positions[id] = [Math.round(x), Math.round(y)];
+    ui['positions'] = positions;
+    flow.ui = ui as Flow['ui'];
     return undefined;
   });
 }
 
 /** Drop every stored position — the map falls back to auto layout. */
 export function clearNodePositions(source: string): EditResult {
-  return withDoc(source, (doc) => {
-    doc.deleteIn(['ui', 'positions']);
-    const ui = doc.get('ui', true);
-    if (isMap(ui) && ui.items.length === 0) doc.delete('ui');
+  return withFlow(source, (flow) => {
+    const ui = flow.ui as unknown;
+    if (!isObject(ui)) return undefined;
+    delete ui['positions'];
+    if (Object.keys(ui).length === 0) delete flow.ui;
     return undefined;
   });
 }
@@ -256,17 +284,23 @@ export function nodePositions(ui: unknown): Record<string, { x: number; y: numbe
  * Stamp platform-assigned identity into the document — the row id at
  * create time, the bumped `version` at publish (doc 48: both are
  * platform-assigned; authors never maintain them by hand).
+ *
+ * A new draft usually has no `id` (and may have no `name`) yet, so it
+ * can't be decoded as a flow until these are in. They are set on the
+ * parsed YAML first; the document then goes through the model like every
+ * other edit, and comes out canonical.
  */
 export function stampIdentity(
   source: string,
   identity: { id?: string; version?: number; name?: string },
 ): EditResult {
-  return withDoc(source, (doc) => {
-    if (identity.id !== undefined) doc.set('id', identity.id);
-    if (identity.version !== undefined) doc.set('version', identity.version);
-    if (identity.name !== undefined) doc.set('name', identity.name);
-    return undefined;
-  });
+  const doc = parseDocument(source);
+  if (doc.errors.length > 0) return { ok: false, error: 'parse_failed' };
+  if (!isObject(doc.toJS())) return { ok: false, error: 'invalid_document' };
+  if (identity.id !== undefined) doc.set('id', identity.id);
+  if (identity.version !== undefined) doc.set('version', identity.version);
+  if (identity.name !== undefined) doc.set('name', identity.name);
+  return withFlow(doc.toString(), () => undefined);
 }
 
 /**
@@ -283,8 +317,8 @@ export function stampIdentity(
  * document keeps working is untouched.
  */
 export function setSchemaVersion(source: string, version: number): EditResult {
-  return withDoc(source, (doc) => {
-    doc.set('schema_version', version);
+  return withFlow(source, (flow) => {
+    flow.schema_version = version as Flow['schema_version'];
     return undefined;
   });
 }

@@ -1,8 +1,9 @@
-// The structured edit ops must preserve what the engine ignores but
-// humans rely on — comments, key order, the `ui` block — while keeping
-// every reference (entry, exits, ui positions) consistent. A rename
-// that misses one exit target silently reroutes a caller; these tests
-// are the fence.
+// The structured edit ops go through the model (parse → change →
+// serialize) and keep every reference (entry, exits, ui positions)
+// consistent. A rename that misses one exit target silently reroutes a
+// caller; these tests are the fence. What the engine ignores but people
+// rely on is data — `note`, node order, the `ui` block — and survives;
+// YAML comments aren't, and don't (docs/01-canonical-document.md).
 //
 // Migrated from the platform repo's packages/flow-schema/src/mutate.test.ts.
 
@@ -25,6 +26,8 @@ import {
   stampIdentity,
 } from '../src/mutate.js';
 import { COMPONENT_KINDS } from '../src/model.js';
+import { serializeFlow } from '../src/serialize.js';
+import { parseFlow } from '../src/parse.js';
 
 const SOURCE = `schema_version: 1
 id: flow_1
@@ -65,9 +68,14 @@ describe('renameNode', () => {
     expect(checkFlow(source).valid).toBe(true);
   });
 
-  it('preserves comments', () => {
-    const source = edited(renameNode(SOURCE, 'welcome', 'greet'));
-    expect(source).toContain('swap this for your own greeting');
+  it('writes the canonical text: comments go, notes and node order stay', () => {
+    const noted = SOURCE.replace('    kind: greeting\n', '    kind: greeting\n    note: Swap this for your own greeting.\n');
+    const source = edited(renameNode(noted, 'welcome', 'greet'));
+    expect(source).not.toContain('#');
+    expect(source).toContain('note: Swap this for your own greeting.');
+    expect(Object.keys(checkFlow(source).flow?.nodes ?? {})).toEqual(['greet', 'menu', 'bye']);
+    const flow = parseFlow(source).flow;
+    expect(flow && serializeFlow(flow)).toBe(source);
   });
 
   it('refuses a duplicate or invalid id', () => {
@@ -91,7 +99,9 @@ describe('removeNode', () => {
     // The menu's "1" exit pointed at welcome — gone, so validation now
     // reports the menu's missing exit instead of a dangling target.
     expect(flow?.nodes['menu']?.exits?.['1']).toBeUndefined();
-    expect(flow?.ui).toEqual({});
+    // The ui block held only welcome's position; an empty optional map is
+    // left out of the canonical text.
+    expect(flow?.ui).toBeUndefined();
     const issueCodes = checkFlow(source).issues.map((issue) => issue.code);
     expect(issueCodes).toContain('missing_exits');
     expect(issueCodes).toContain('missing_entry');
@@ -173,10 +183,9 @@ describe('setNodeValue', () => {
 });
 
 describe('node positions', () => {
-  it('stores a rounded [x, y] pair under ui.positions, preserving comments', () => {
+  it('stores a rounded [x, y] pair under ui.positions', () => {
     const source = edited(setNodePosition(SOURCE, 'menu', 220.6, 96.2));
-    expect(source).toContain('menu: [ 221, 96 ]');
-    expect(source).toContain('swap this for your own greeting');
+    expect(source).toContain('    menu: [221, 96]\n');
     const { flow } = checkFlow(source);
     expect(nodePositions(flow?.ui)).toEqual({ menu: { x: 221, y: 96 } });
     expect(checkFlow(source).valid).toBe(true);
@@ -231,7 +240,16 @@ describe('stampIdentity', () => {
     const { flow } = checkFlow(source);
     expect(flow?.id).toBe('flow_abc123');
     expect(flow?.version).toBe(4);
-    expect(source).toContain('swap this for your own greeting');
+  });
+
+  it('completes a new draft that has no id or name yet', () => {
+    const draft = SOURCE.replace('id: flow_1\nname: Test\n', '');
+    expect(setEntry(draft, 'menu')).toEqual({ ok: false, error: 'invalid_document' });
+    const source = edited(stampIdentity(draft, { id: 'flow_new', name: 'New flow' }));
+    const { flow } = checkFlow(source);
+    expect(flow?.id).toBe('flow_new');
+    expect(flow?.name).toBe('New flow');
+    expect(source.startsWith('schema_version: 1\nid: flow_new\nname: New flow\n')).toBe(true);
   });
 
   it('fails cleanly on unparseable text', () => {
@@ -245,7 +263,6 @@ describe('setSchemaVersion', () => {
     const { flow } = checkFlow(source);
     expect(flow?.schema_version).toBe(2);
     expect(flow?.entry).toBe('welcome');
-    expect(source).toContain('swap this for your own greeting');
     expect(source).toContain('ui:');
   });
 
@@ -258,5 +275,30 @@ describe('setSchemaVersion', () => {
 
   it('fails cleanly on unparseable text', () => {
     expect(setSchemaVersion('nodes: [', 2)).toEqual({ ok: false, error: 'parse_failed' });
+  });
+});
+
+describe('what an edit refuses', () => {
+  it('refuses a document with fields a save would delete', () => {
+    const extra = SOURCE.replace('    kind: hangup\n', '    kind: hangup\n    colour: blue\n');
+    expect(setEntry(extra, 'menu')).toEqual({ ok: false, error: 'unknown_field' });
+  });
+
+  it('refuses a document that does not decode, and says so apart from bad YAML', () => {
+    const broken = SOURCE.replace('    options: { "1": Loop }\n', '');
+    expect(setEntry(broken, 'menu')).toEqual({ ok: false, error: 'invalid_document' });
+    expect(setEntry('nodes: [', 'menu')).toEqual({ ok: false, error: 'parse_failed' });
+  });
+
+  it('refuses a version it cannot write back', () => {
+    const future = SOURCE.replace('schema_version: 1', 'schema_version: 99');
+    expect(setEntry(future, 'menu')).toEqual({ ok: false, error: 'unsupported_version' });
+  });
+
+  it('still edits a document that only fails validation', () => {
+    // A missing exit is a validation error, not a decode error.
+    const unwired = SOURCE.replace('    exits: { next: menu }\n', '');
+    expect(checkFlow(unwired).valid).toBe(false);
+    expect(setEntry(unwired, 'menu').ok).toBe(true);
   });
 });

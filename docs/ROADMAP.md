@@ -31,9 +31,9 @@ Nothing is migrated in the consumer repos yet (that's Phase 3).
 ### TypeScript — move from the platform repo's `packages/flow-schema/src`
 - [x] `parse.ts` — safe-subset YAML decode (anchors/aliases/tags/dup-keys/
       implicit-typing rejection, `nodeRanges` source offsets).
-- [x] `mutate.ts` — comment-preserving edits (stays TS-only; the daemon never
-      edits). Works on the `yaml` CST, not the generated types; only import
-      from the model is `ComponentKind`. 20-case suite ported.
+- [x] `mutate.ts` — structured edits. Originally comment-preserving edits on
+      the `yaml` CST; now parse → change the model → `serializeFlow`, the
+      canonical text shared with Rust (docs/01-canonical-document.md).
 - [x] `validate.ts` — reachability BFS, caller-trap, exit-set exactness, DTMF,
       prompt length. ⚠️ dangling-target code reconciled to the frozen corpus:
       `unknown_exit_target` → `unknown_target`.

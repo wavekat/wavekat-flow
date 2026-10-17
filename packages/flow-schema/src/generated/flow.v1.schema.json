@@ -25,12 +25,16 @@
       "minimum": 0,
       "default": 1
     },
+    "note": {
+      "description": "The author's note about the whole flow: free text for people reading it, in place of a YAML comment. Never read by the engine.",
+      "type": "string"
+    },
     "entry": {
       "description": "Node id where execution begins.",
       "type": "string"
     },
     "nodes": {
-      "description": "The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution.",
+      "description": "The flat node set, keyed by human-meaningful node id and string-referenced by exits. Order is irrelevant to execution, but it is the author's reading order and is kept on save.",
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/Node" }
     },
@@ -120,6 +124,7 @@
       "required": ["kind", "prompt"],
       "properties": {
         "kind": { "const": "greeting" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "prompt": { "$ref": "#/$defs/Prompt" },
         "exits": { "$ref": "#/$defs/Exits" }
       }
@@ -130,6 +135,7 @@
       "required": ["kind", "schedule", "timezone"],
       "properties": {
         "kind": { "const": "hours" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "schedule": { "$ref": "#/$defs/WeeklySchedule" },
         "timezone": { "description": "IANA zone (America/New_York). Validated to resolve at load.", "type": "string" },
         "exceptions": { "type": "array", "items": { "$ref": "#/$defs/HoursException" } },
@@ -142,6 +148,7 @@
       "required": ["kind", "prompt", "options"],
       "properties": {
         "kind": { "const": "menu" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "prompt": { "$ref": "#/$defs/Prompt" },
         "options": {
           "description": "Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator.",
@@ -159,6 +166,7 @@
       "required": ["kind", "timeout_secs"],
       "properties": {
         "kind": { "const": "ring" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "timeout_secs": { "type": "integer", "minimum": 0 },
         "exits": { "$ref": "#/$defs/Exits" }
       }
@@ -169,6 +177,7 @@
       "required": ["kind", "prompt"],
       "properties": {
         "kind": { "const": "message" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "prompt": { "$ref": "#/$defs/Prompt" },
         "max_secs": { "type": "integer", "minimum": 0, "default": 120 },
         "tone": { "allOf": [{ "$ref": "#/$defs/MessageTone" }], "default": "beep" },
@@ -181,6 +190,7 @@
       "required": ["kind", "target"],
       "properties": {
         "kind": { "const": "transfer" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "target": { "type": "string" },
         "exits": { "$ref": "#/$defs/Exits" }
       }
@@ -191,6 +201,7 @@
       "required": ["kind"],
       "properties": {
         "kind": { "const": "hangup" },
+        "note": { "description": "The author's note about this step: free text for people reading the flow, in place of a YAML comment. Never read by the engine.", "type": "string" },
         "prompt": { "$ref": "#/$defs/Prompt" },
         "exits": { "$ref": "#/$defs/Exits" }
       }
