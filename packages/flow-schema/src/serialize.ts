@@ -281,7 +281,7 @@ export function isPlain(s: string, flow: boolean): boolean {
     const cp = ch.codePointAt(0) as number;
     if (cp === 0x09 || needsUnicodeEscape(cp)) return false;
   }
-  if (flow && /[,[\]{}]/.test(s)) return false;
+  if (flow && /[,[\]{}:]/.test(s)) return false;
   return !RESERVED.has(s.replace(/[A-Z]/g, (c) => c.toLowerCase()));
 }
 

@@ -381,7 +381,7 @@ pub(crate) fn is_plain(s: &str, flow: bool) -> bool {
     if s.chars().any(|c| c == '\t' || needs_unicode_escape(c)) {
         return false;
     }
-    if flow && s.contains([',', '[', ']', '{', '}']) {
+    if flow && s.contains([',', '[', ']', '{', '}', ':']) {
         return false;
     }
     !RESERVED.contains(&s.to_ascii_lowercase().as_str())
@@ -463,6 +463,9 @@ mod tests {
         assert!(is_plain("a, b", false));
         assert!(!is_plain("a, b", true));
         assert!(!is_plain("a{b", true));
+        // libyaml refuses a `:` inside a plain scalar in flow style.
+        assert!(is_plain("a:b", false));
+        assert!(!is_plain("a:b", true));
     }
 
     #[test]

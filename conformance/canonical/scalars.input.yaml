@@ -11,7 +11,7 @@ nodes:
   b:
     kind: menu
     prompt: 'It''s 9: press 1 or # for more'
-    options: { "1": "Sales, new orders", "2": Plain label }
+    options: { "1": "Sales, new orders", "2": Plain label, "3": "Ext 5:30" }
     exits: { "1": c, "2": c, no_input: c, invalid: c }
   c:
     kind: message
