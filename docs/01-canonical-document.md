@@ -135,7 +135,8 @@ the two libraries don't agree. The rules:
   - It doesn't end with a space or `:`.
   - It contains no `: `, ` #`, tab, line break, or any character that
     needs an escape (below).
-  - In flow style, it also contains none of `,` `[` `]` `{` `}`.
+  - In flow style, it also contains none of `,` `[` `]` `{` `}` `:`. (libyaml,
+    which Rust readers use, rejects a `:` inside a plain scalar there.)
   - Lowercased, it isn't `true`, `false`, `yes`, `no`, `on`, `off`, `y`,
     `n`, `null`, `inf`, `nan` or `infinity`. (YAML 1.1 readers still treat
     some of these as booleans or numbers.)
@@ -166,8 +167,10 @@ the two libraries don't agree. The rules:
   do): `Flow::from_yaml`, change the typed tree, `Flow::to_yaml`. This
   works offline and needs no YAML handling in the consumer. Format rules a
   tool needs live in the crate: `is_generated_clip_ref` (twin of
-  `isGeneratedClipRef`), `prompt_fields(kind)` (kept in step with
-  `Node::prompts()` by a corpus test) and `edit::load` (below).
+  `isGeneratedClipRef`), `is_local_audio_ref`, `prompt_fields(kind)` (kept
+  in step with `Node::prompts()` by a corpus test), `Node::prompt_slots`
+  and `prompt_slots_mut` (each prompt with the field it comes from, to
+  read or change in place) and `edit::load` (below).
 - **TS**: `mutate.ts` keeps its public API (source in, source out,
   `EditResult`), so callers don't change. Inside, each op is
   `parseFlow → change → serializeFlow` instead of CST surgery. A form edit
@@ -208,7 +211,8 @@ the platform waits for the npm release.
   regenerated; the Rust build generates `IndexMap` maps.
 - Rust: `serde_json` `preserve_order`; the canonical `to_yaml`;
   `edit::load` (unknown fields, newer version, comments);
-  `is_generated_clip_ref`, `is_local_audio_ref`, `prompt_fields`.
+  `is_generated_clip_ref`, `is_local_audio_ref`, `prompt_fields`,
+  `Node::prompt_slots` and `prompt_slots_mut`.
 - TS: `serializeFlow`; `note` decoded; `comment_ignored`; `mutate.ts`
   rebuilt on the model with the `invalid_document` and `unknown_field`
   refusals.
