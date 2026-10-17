@@ -163,8 +163,11 @@ enum Quote {
 /// space or tab, unless it's inside a quoted scalar or a block scalar's
 /// content (`|` / `>`). Quotes only open a scalar where a value or key
 /// starts (after `: `, `- `, `? `, `[`, `{`, `,` or at the start of a
-/// line), so the apostrophe in `It's open` is just a letter.
+/// line), so the apostrophe in `It's open` is just a letter. A `#` right
+/// after a closing quote (`"x"# c`) also starts one, as in YAML parsers
+/// that read the scalar first. A leading byte order mark is skipped.
 pub fn comments(src: &str) -> Vec<Comment> {
+    let src = src.strip_prefix('\u{feff}').unwrap_or(src);
     let mut out = Vec::new();
     let mut quote: Option<Quote> = None;
     // Indent of the line that opened a block scalar still being read.
@@ -182,6 +185,8 @@ pub fn comments(src: &str) -> Vec<Comment> {
         let chars: Vec<(usize, char)> = line.char_indices().collect();
         // The last non-blank character before the current one on this line.
         let mut last: Option<char> = None;
+        // The index just after a quoted scalar that closed on this line.
+        let mut closed_at: Option<usize> = None;
         let mut i = 0;
         while i < chars.len() {
             let (at, c) = chars[i];
@@ -189,7 +194,10 @@ pub fn comments(src: &str) -> Vec<Comment> {
                 Some(Quote::Double) => {
                     match c {
                         '\\' => i += 1,
-                        '"' => quote = None,
+                        '"' => {
+                            quote = None;
+                            closed_at = Some(i + 1);
+                        }
                         _ => {}
                     }
                     last = Some(c);
@@ -202,6 +210,7 @@ pub fn comments(src: &str) -> Vec<Comment> {
                             i += 1;
                         } else {
                             quote = None;
+                            closed_at = Some(i + 1);
                         }
                     }
                     last = Some(c);
@@ -218,7 +227,7 @@ pub fn comments(src: &str) -> Vec<Comment> {
                 _ => false,
             };
             match c {
-                '#' if after_blank || last.is_none() => {
+                '#' if after_blank || last.is_none() || closed_at == Some(i) => {
                     out.push(Comment {
                         line: n + 1,
                         text: line[at + 1..].trim().to_string(),
@@ -288,6 +297,24 @@ nodes:
     }
 
     #[test]
+    fn comments_edge_cases() {
+        // A byte order mark doesn't hide the first line's comment.
+        assert_eq!(lines("\u{feff}# bom\na: 1\n"), [(1, "bom".into())]);
+        // A `#` straight after a closing quote is a comment, as in TS.
+        assert_eq!(
+            lines("a: \"x\"# c\nb: 'y'# d\n"),
+            [(1, "c".into()), (2, "d".into())]
+        );
+        // Line numbers count CRLF endings once, and non-ASCII text is fine.
+        assert_eq!(
+            lines("a: 1\r\n# crlf\r\nb: 再 # 见\r\n"),
+            [(2, "crlf".into()), (3, "见".into())]
+        );
+        // A plain `#` with no space before it is part of the scalar.
+        assert!(comments("a: b#c\nd:# e\n").is_empty());
+    }
+
+    #[test]
     fn load_refuses_unknown_fields() {
         let src = "\
 schema_version: 2
@@ -311,6 +338,34 @@ ui:
                 "nodes.a.prompt.speed".into(),
             ])
         );
+    }
+
+    #[test]
+    fn load_refuses_unknown_fields_inside_hours() {
+        // The same four documents the TypeScript decoder warns about.
+        let doc = |node: &str| {
+            format!("schema_version: 2\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hours\n    timezone: UTC\n{node}")
+        };
+        for (node, path) in [
+            (
+                "    schedule:\n      mon: [{ open: \"09:00\", close: \"17:00\", x: 1 }]\n",
+                "nodes.a.schedule.mon.0.x",
+            ),
+            (
+                "    schedule:\n      funday: [{ open: \"09:00\", close: \"17:00\" }]\n",
+                "nodes.a.schedule.funday",
+            ),
+            (
+                "    schedule: {}\n    exceptions:\n      - { date: \"2026-12-25\", closed: true, zzz: 1 }\n",
+                "nodes.a.exceptions.0.zzz",
+            ),
+        ] {
+            assert_eq!(
+                load(&doc(node)).unwrap_err(),
+                LoadError::UnknownFields(vec![path.into()]),
+                "{node}"
+            );
+        }
     }
 
     #[test]

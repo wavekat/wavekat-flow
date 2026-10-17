@@ -72,6 +72,9 @@ export type Comment = {
   range: [number, number];
 };
 
+/** The `yaml` lexer's structure markers: DOCUMENT, FLOW_END and SCALAR. */
+const LEXER_MARKERS = new Set(['\u0002', '\u0018', '\u001f']);
+
 /**
  * Every comment in `source`, in order. Comments carry no meaning in a flow
  * document (docs/01-canonical-document.md §2): the words belong in `note`,
@@ -83,6 +86,10 @@ export function findComments(source: string): Comment[] {
   let offset = 0;
   let line = 1;
   for (const token of new Lexer().lex(source)) {
+    // The lexer also yields one-character control tokens (document start,
+    // scalar start, flow end) that mark structure and are not in the
+    // source, so they take no space in the offset.
+    if (LEXER_MARKERS.has(token) && !source.startsWith(token, offset)) continue;
     if (token.startsWith('#')) {
       out.push({
         line,

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseFlow } from '../src/parse.js';
+import { findComments, parseFlow } from '../src/parse.js';
 import { promptTranscript, requiredAssets } from '../src/model.js';
 
 // The doc 48 "flow document, sketched" example — kept in sync with the
@@ -322,6 +322,32 @@ nodes:
     expect(comments.every((c) => c.severity === 'warning')).toBe(true);
     const [first] = comments;
     expect(first && SRC.slice(first.range?.[0], first.range?.[1])).toBe('# about this flow');
+  });
+
+  it('comment ranges are source offsets, however much structure comes before', () => {
+    // The yaml lexer yields control tokens that are not source text; a range
+    // must not count them (it used to drift by one per scalar).
+    const sources = [
+      SRC,
+      'a: 1 # one\nb: "x # y" # two\nc: |\n  # in\n  t\n# three\nd: [1, # four\n  2]\n',
+      '\ufeff--- # doc\na: 1\n... # end\n',
+      'a: 1\r\n# crlf\r\nb: 再 # 见\r\n',
+      'k: v\n'.repeat(50) + '# late\n',
+    ];
+    for (const source of sources) {
+      const found = findComments(source);
+      expect(found.length).toBeGreaterThan(0);
+      for (const c of found) {
+        const text = source.slice(c.range[0], c.range[1]);
+        expect(text.startsWith('#')).toBe(true);
+        expect(text.slice(1).trim()).toBe(c.text);
+        expect(source.slice(0, c.range[0]).split('\n').length).toBe(c.line);
+      }
+    }
+    // The issue carries the same range.
+    const text = SRC.replace('# about this flow\n', '');
+    const [trailing] = parseFlow(text).issues.filter((i) => i.code === 'comment_ignored');
+    expect(trailing && text.slice(trailing.range?.[0], trailing.range?.[1])).toBe('# trailing');
   });
 
   it('a note must be text', () => {
