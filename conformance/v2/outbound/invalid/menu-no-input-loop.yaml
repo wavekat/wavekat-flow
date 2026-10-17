@@ -1,0 +1,19 @@
+schema_version: 2
+id: flow_outbound_menu_no_input_loop
+name: Repeats into voicemail
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Hello, this is a reminder about your appointment tomorrow at ten.
+    exits: { next: ask }
+  ask:
+    kind: menu
+    prompt: Press 1 to confirm.
+    options: { "1": Confirm }
+    exits: { "1": thanks, no_input: hello, invalid: bye }
+  thanks:
+    kind: hangup
+    prompt: Thanks, see you then.
+  bye:
+    kind: hangup

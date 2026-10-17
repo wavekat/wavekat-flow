@@ -1,0 +1,15 @@
+schema_version: 2
+id: flow_outbound_ring
+name: Outbound with a ring step
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Please hold while we connect you.
+    exits: { next: desk }
+  desk:
+    kind: ring
+    timeout_secs: 20
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup

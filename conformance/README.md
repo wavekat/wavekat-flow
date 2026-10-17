@@ -17,7 +17,16 @@ conformance/
       <case>.yaml
       <case>.expected.json
   v2/                       # `book` — same layout, its own frozen cases
+  vN/outbound/              # optional: the outbound profile
+    valid/  invalid/
 ```
+
+`vN/outbound/` holds cases for the **outbound** gate (`validate_outbound` /
+`validateOutbound`): a flow run on a call the app places, with no person
+standing by. Same file pair and expectation shape; `semantic` is the verdict
+of the outbound gate, which includes the base validation. These cases stay
+out of the top-level `valid/`/`invalid/` buckets because a flow refused for
+outbound — one with a `ring` step, say — is a perfectly good inbound flow.
 
 Every `<case>.yaml` has a sibling `<case>.expected.json`:
 

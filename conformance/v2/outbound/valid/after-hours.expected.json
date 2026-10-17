@@ -1,0 +1,5 @@
+{
+  "description": "Every outbound-allowed kind in one document — hours, greeting, menu, message and hangup — declared at schema_version 2. The hours step is not on a loop; the only loop goes through the menu.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

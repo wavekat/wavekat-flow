@@ -1,0 +1,5 @@
+{
+  "description": "A typical outbound flow: say something, ask the callee to confirm, and end. It loops (the menu's `2` replays the greeting), which is fine: the loop runs through a menu, which waits for the callee, and the menu's `no_input` exit ends the call when nobody answers.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

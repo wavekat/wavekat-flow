@@ -1,0 +1,20 @@
+schema_version: 1
+id: flow_reminder
+name: Appointment reminder
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Hello, this is a reminder about your appointment tomorrow at ten.
+    exits: { next: ask }
+  ask:
+    kind: menu
+    prompt: Press 1 to confirm, or 2 to hear this again.
+    options: { "1": Confirm, "2": Repeat }
+    exits: { "1": thanks, "2": hello, no_input: bye, invalid: ask }
+  thanks:
+    kind: hangup
+    prompt: Thanks, see you then.
+  bye:
+    kind: hangup
+    prompt: Sorry we missed you. Goodbye.

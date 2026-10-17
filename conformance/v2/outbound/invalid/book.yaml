@@ -1,0 +1,16 @@
+schema_version: 2
+id: flow_outbound_book
+name: Outbound with a booking step
+entry: take_booking
+nodes:
+  take_booking:
+    kind: book
+    prompt: I can book you in.
+    confirm_prompt: You're booked for
+    timezone: UTC
+    schedule:
+      tue: [{ open: "09:00", close: "17:00" }]
+    duration_mins: 30
+    exits: { booked: bye, no_slots: bye, no_input: bye, unavailable: bye }
+  bye:
+    kind: hangup

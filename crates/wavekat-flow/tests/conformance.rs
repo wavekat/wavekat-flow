@@ -15,7 +15,7 @@
 use std::{fs, path::PathBuf};
 
 use wavekat_flow::model::Flow;
-use wavekat_flow::validate::validate;
+use wavekat_flow::validate::{validate, validate_outbound};
 
 #[derive(serde::Deserialize)]
 struct Expectation {
@@ -59,9 +59,12 @@ fn corpus_dir(version: &str, bucket: &str) -> PathBuf {
 }
 
 fn yaml_cases(version: &str, bucket: &str) -> Vec<(String, PathBuf)> {
-    let dir = corpus_dir(version, bucket);
+    yaml_cases_in(&corpus_dir(version, bucket))
+}
+
+fn yaml_cases_in(dir: &std::path::Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
-    for entry in fs::read_dir(&dir).expect("read corpus dir") {
+    for entry in fs::read_dir(dir).expect("read corpus dir") {
         let path = entry.unwrap().path();
         if path.extension().and_then(|e| e.to_str()) == Some("yaml") {
             let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
@@ -129,9 +132,18 @@ fn parse_error_code(err: &serde_yaml_ng::Error) -> &'static str {
 /// The full semantic gate over the raw YAML: parse (serde) + validate. Returns
 /// `(accepted, reported_codes)`.
 fn semantic_result(yaml: &str) -> (bool, Vec<String>) {
+    semantic_result_with(yaml, validate)
+}
+
+/// [`semantic_result`] with the validator chosen — the outbound corpus runs
+/// the same parse step through [`validate_outbound`].
+fn semantic_result_with(
+    yaml: &str,
+    gate: fn(&Flow) -> Result<(), Vec<wavekat_flow::validate::ValidationError>>,
+) -> (bool, Vec<String>) {
     match Flow::from_yaml(yaml) {
         Err(e) => (false, vec![parse_error_code(&e).to_string()]),
-        Ok(flow) => match validate(&flow) {
+        Ok(flow) => match gate(&flow) {
             Ok(()) => (true, Vec::new()),
             Err(errs) => (false, errs.iter().map(|e| e.code().to_string()).collect()),
         },
@@ -214,4 +226,57 @@ fn corpus_required_assets_match_expectations() {
     // A corpus that stopped pinning any would make this test pass by
     // doing nothing, which is the one way it could fail silently.
     assert!(pinned > 0, "no corpus case pins a required-asset set");
+}
+
+// The outbound profile: `conformance/vN/outbound/{valid,invalid}`, run
+// through `validate_outbound` (which includes the base validation) with the
+// same subset contract as the semantic corpus above. Kept out of the
+// top-level `valid/`/`invalid/` buckets on purpose: a flow refused for
+// outbound — a `ring` step, say — is a perfectly good inbound flow. The TS
+// package runs the same cases through `validateOutbound`.
+#[test]
+fn outbound_corpus_matches_expectations() {
+    let mut ran = 0usize;
+    for version in corpus_versions() {
+        let number: u32 = version[1..].parse().expect("vN directory name");
+        let schema: serde_json::Value =
+            serde_json::from_str(wavekat_flow::flow_schema(number).expect("schema")).unwrap();
+        let validator = jsonschema::validator_for(&schema).expect("compile schema");
+
+        for bucket in ["valid", "invalid"] {
+            let dir = corpus_root().join(&version).join("outbound").join(bucket);
+            if !dir.is_dir() {
+                continue;
+            }
+            for (stem, path) in yaml_cases_in(&dir) {
+                let case = format!("{version}/outbound/{bucket}/{stem}");
+                let yaml = fs::read_to_string(&path).unwrap();
+                let exp: Expectation = serde_json::from_str(
+                    &fs::read_to_string(dir.join(format!("{stem}.expected.json"))).unwrap(),
+                )
+                .unwrap();
+
+                let doc: serde_json::Value = serde_yaml_ng::from_str(&yaml).unwrap();
+                assert_eq!(
+                    validator.is_valid(&doc),
+                    exp.structurally_valid,
+                    "structural verdict mismatch for {case}"
+                );
+
+                let (accepted, codes) = semantic_result_with(&yaml, validate_outbound);
+                assert_eq!(
+                    accepted, exp.semantic.ok,
+                    "outbound acceptance mismatch for {case} (codes: {codes:?})"
+                );
+                for code in &exp.semantic.errors {
+                    assert!(
+                        codes.contains(code),
+                        "expected outbound error {code:?} for {case}, got {codes:?}"
+                    );
+                }
+                ran += 1;
+            }
+        }
+    }
+    assert!(ran > 0, "the outbound corpus has no cases");
 }

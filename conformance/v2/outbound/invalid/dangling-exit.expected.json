@@ -1,0 +1,5 @@
+{
+  "description": "The outbound gate includes the base validation: a document the base validator rejects is rejected on outbound too, with the same codes.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["unknown_target"] }
+}

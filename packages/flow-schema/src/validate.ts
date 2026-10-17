@@ -275,21 +275,7 @@ function checkGraph(
   issues: Issue[],
   at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
 ): void {
-  // BFS from entry over exit edges.
-  const reachable = new Set<string>([flow.entry]);
-  const queue = [flow.entry];
-  while (queue.length > 0) {
-    const id = queue.shift();
-    if (id === undefined) break;
-    const node = flow.nodes[id];
-    if (!node) continue;
-    for (const target of Object.values(node.exits ?? {})) {
-      if (target in flow.nodes && !reachable.has(target)) {
-        reachable.add(target);
-        queue.push(target);
-      }
-    }
-  }
+  const reachable = reachableFromEntry(flow);
 
   for (const id of Object.keys(flow.nodes)) {
     if (!reachable.has(id)) {
@@ -332,4 +318,138 @@ function checkGraph(
       });
     }
   }
+}
+
+/** Node ids reachable from `entry` over exit edges (`entry` included when
+ * it exists). */
+function reachableFromEntry(flow: Flow): Set<string> {
+  const reachable = new Set<string>();
+  if (!(flow.entry in flow.nodes)) return reachable;
+  reachable.add(flow.entry);
+  const queue = [flow.entry];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (id === undefined) break;
+    const node = flow.nodes[id];
+    if (!node) continue;
+    for (const target of Object.values(node.exits ?? {})) {
+      if (target in flow.nodes && !reachable.has(target)) {
+        reachable.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return reachable;
+}
+
+// ── Outbound profile ─────────────────────────────────────────────────────
+
+/**
+ * The kinds a flow may use when it runs on a call the app *places*, with
+ * no person standing by. Twin: `validate.rs` `OUTBOUND_KINDS`.
+ *
+ * Left out: `ring` (there is nobody to hand the call to), `book` (it
+ * books against the number that called in, which an outbound call does
+ * not have), and `transfer` (not offered on outbound calls yet).
+ */
+export const OUTBOUND_KINDS: readonly ComponentKind[] = [
+  'greeting',
+  'menu',
+  'message',
+  'hangup',
+  'hours',
+];
+
+/**
+ * Validate a flow for an **outbound** call: everything `validateFlow`
+ * checks, plus the rules for a call the app places itself.
+ *
+ * This runs `validateFlow` first and adds to its issues, so it is the one
+ * gate to call for an outbound flow — there is no need to call both.
+ *
+ * The outbound rules:
+ *
+ * - every node is one of `OUTBOUND_KINDS` (`outbound_node_not_allowed`);
+ * - no loop reachable from `entry` is made only of moves that happen
+ *   without the callee — any exit of a `greeting` or `hours` step, or a
+ *   `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
+ *   callee who stays silent, would never end (`outbound_unbounded_loop`).
+ *   A loop through a menu's digit or `invalid` exits is fine: only a
+ *   callee pressing keys can take it.
+ *
+ * Twin: `validate.rs` `validate_outbound`.
+ */
+export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
+  const issues = validateFlow(flow, nodeRanges);
+  const at = (node: string): Pick<Issue, 'severity' | 'node' | 'range'> => ({
+    severity: 'error',
+    node,
+    range: nodeRanges[node],
+  });
+
+  for (const id of Object.keys(flow.nodes).sort()) {
+    const node = flow.nodes[id];
+    if (node && !OUTBOUND_KINDS.includes(node.kind as ComponentKind)) {
+      issues.push({
+        ...at(id),
+        code: 'outbound_node_not_allowed',
+        message: `node "${id}" is a ${node.kind} step, which an outbound call cannot run`,
+        params: { kind: node.kind },
+      });
+    }
+  }
+
+  for (const id of unboundedLoopNodes(flow)) {
+    issues.push({
+      ...at(id),
+      code: 'outbound_unbounded_loop',
+      message: `node "${id}" is on a loop that never waits for the callee, so an outbound call could repeat it forever`,
+    });
+  }
+
+  return issues;
+}
+
+/** The exits a node takes without the callee doing anything: every exit of
+ * a `greeting` (always `next`) or `hours` step (picked by the clock), and a
+ * `menu`'s `no_input` (taken when nobody presses a key — voicemail, say). */
+function silentExits(node: Flow['nodes'][string] | undefined): string[] {
+  if (!node) return [];
+  const exits = Object.entries(node.exits ?? {});
+  switch (node.kind) {
+    case 'greeting':
+    case 'hours':
+      return exits.map(([, target]) => target);
+    case 'menu':
+      return exits.filter(([key]) => key === 'no_input').map(([, target]) => target);
+    default:
+      return [];
+  }
+}
+
+/** Every node reachable from `entry` that sits on a cycle made only of
+ * silent exits (see `silentExits`), in id order. */
+function unboundedLoopNodes(flow: Flow): string[] {
+  const reachable = reachableFromEntry(flow);
+  const successors = (id: string): string[] =>
+    silentExits(flow.nodes[id]).filter((target) => reachable.has(target));
+
+  const onLoop: string[] = [];
+  for (const id of [...reachable].sort()) {
+    // Does `id` lead back to itself within the subgraph?
+    const seen = new Set<string>();
+    const stack = successors(id);
+    while (stack.length > 0) {
+      const next = stack.pop() as string;
+      if (next === id) {
+        onLoop.push(id);
+        break;
+      }
+      if (!seen.has(next)) {
+        seen.add(next);
+        stack.push(...successors(next));
+      }
+    }
+  }
+  return onLoop;
 }

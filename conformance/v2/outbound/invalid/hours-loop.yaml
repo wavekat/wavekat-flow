@@ -1,0 +1,17 @@
+schema_version: 2
+id: flow_outbound_hours_loop
+name: Repeats while open
+entry: check
+nodes:
+  check:
+    kind: hours
+    timezone: UTC
+    schedule:
+      mon: [{ open: "09:00", close: "17:00" }]
+    exits: { open: say, closed: bye }
+  say:
+    kind: greeting
+    prompt: We are open.
+    exits: { next: check }
+  bye:
+    kind: hangup

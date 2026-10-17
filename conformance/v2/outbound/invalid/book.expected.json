@@ -1,0 +1,5 @@
+{
+  "description": "A `book` step books against the number that called in, which a call the app places does not have, so outbound refuses it. The same document is valid as an inbound flow.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_node_not_allowed"] }
+}

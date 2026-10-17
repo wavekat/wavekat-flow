@@ -38,7 +38,7 @@ export type { Issue } from './issues.js';
 export { MISSING_ASSET, hasErrors } from './issues.js';
 export type { ParseResult } from './parse.js';
 export { parseFlow } from './parse.js';
-export { validateFlow } from './validate.js';
+export { OUTBOUND_KINDS, validateFlow, validateOutbound } from './validate.js';
 export type { FlowCheck } from './check.js';
 export { checkFlow } from './check.js';
 export { isValidDate, isValidTimezone, parseTimeMinutes, validateHours } from './hours.js';

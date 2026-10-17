@@ -1,0 +1,5 @@
+{
+  "description": "During opening hours, hours -> greeting -> hours repeats with nothing waiting on the callee; played into voicemail it would never end. The `closed` exit keeps it from being trapped, so the base validator accepts it — this is the case only the outbound rule catches.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_unbounded_loop"] }
+}
