@@ -107,6 +107,44 @@ impl Node {
             Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
         }
     }
+
+    /// [`Node::prompts`] with the field each comes from (`prompt`,
+    /// `confirm_prompt`), for a tool that reports or edits prompts by name.
+    pub fn prompt_slots(&self) -> Vec<(&'static str, &Prompt)> {
+        let fields = prompt_fields(self.kind()).unwrap_or(&[]);
+        let prompts = self.prompts();
+        self.slot_names(fields).into_iter().zip(prompts).collect()
+    }
+
+    /// [`Node::prompt_slots`], mutable: voice a text prompt as a clip, or
+    /// swap a local recording for the clip uploaded from it, then write the
+    /// flow back with [`Flow::to_yaml`].
+    pub fn prompt_slots_mut(&mut self) -> Vec<(&'static str, &mut Prompt)> {
+        let fields = prompt_fields(self.kind()).unwrap_or(&[]);
+        let names = self.slot_names(fields);
+        let prompts: Vec<&mut Prompt> = match self {
+            Node::Greeting { prompt, .. }
+            | Node::Menu { prompt, .. }
+            | Node::Message { prompt, .. } => vec![prompt],
+            Node::Hangup { prompt, .. } => prompt.iter_mut().collect(),
+            Node::Book {
+                prompt,
+                confirm_prompt,
+                ..
+            } => vec![prompt, confirm_prompt],
+            Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
+        };
+        names.into_iter().zip(prompts).collect()
+    }
+
+    /// The field names of the prompts this node has: all of `fields`,
+    /// except a `hangup` with no goodbye has none.
+    fn slot_names(&self, fields: &'static [&'static str]) -> Vec<&'static str> {
+        match self {
+            Node::Hangup { prompt: None, .. } => Vec::new(),
+            _ => fields.to_vec(),
+        }
+    }
 }
 
 /// Every audio asset the flow needs on the device, sorted and unique:

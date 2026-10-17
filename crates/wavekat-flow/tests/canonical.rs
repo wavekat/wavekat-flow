@@ -128,3 +128,42 @@ fn prompt_fields_match_model() {
         }
     }
 }
+
+/// Voicing every text prompt through `prompt_slots_mut` and writing the
+/// flow back: only the prompts change.
+#[test]
+fn voicing_through_prompt_slots() {
+    use wavekat_flow::Prompt;
+    for path in valid_documents() {
+        let mut flow = Flow::from_yaml(&fs::read_to_string(&path).unwrap()).unwrap();
+        let names: Vec<(String, Vec<&str>)> = flow
+            .nodes
+            .iter()
+            .map(|(id, n)| {
+                (
+                    id.clone(),
+                    n.prompt_slots().iter().map(|(f, _)| *f).collect(),
+                )
+            })
+            .collect();
+        let mut n = 0;
+        for node in flow.nodes.values_mut() {
+            for (_, prompt) in node.prompt_slots_mut() {
+                if let Prompt::Text(text) = prompt {
+                    *prompt = Prompt::Audio {
+                        audio: format!("vprompt_{n}"),
+                        transcript: Some(text.clone()),
+                    };
+                    n += 1;
+                }
+            }
+        }
+        let back = Flow::from_yaml(&flow.to_yaml()).unwrap();
+        for (id, fields) in names {
+            let node = &back.nodes[&id];
+            let after: Vec<&str> = node.prompt_slots().iter().map(|(f, _)| *f).collect();
+            assert_eq!(after, fields, "{}: {id}", path.display());
+            assert!(node.prompts().iter().all(|p| p.as_text().is_none()));
+        }
+    }
+}
