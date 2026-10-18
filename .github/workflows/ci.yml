@@ -44,6 +44,8 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - name: Test (types regenerate from the schema on build)
         run: cargo test -p wavekat-flow
+      - name: Older readers must keep reading current documents
+        run: cargo test -p compat-old-readers
       - name: Fail on stale crate-local schema copy (synced by build.rs)
         run: |
           if ! git diff --exit-code -- crates/wavekat-flow/schema; then
