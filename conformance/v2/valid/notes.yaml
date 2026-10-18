@@ -1,0 +1,51 @@
+schema_version: 2
+id: flow_notes
+name: Notes on the flow and on every kind of step
+note: Written by the front desk; ring the owner first.
+entry: welcome
+nodes:
+  welcome:
+    kind: greeting
+    note: Keep the greeting short.
+    prompt: Thanks for calling.
+    exits: { next: check_hours }
+  check_hours:
+    kind: hours
+    note: Open Tuesday only.
+    timezone: America/New_York
+    schedule:
+      tue: [{ open: "09:00", close: "17:00" }]
+    exits: { open: front_desk, closed: menu }
+  front_desk:
+    kind: ring
+    note: Rings the shop phone.
+    timeout_secs: 20
+    exits: { no_answer: leave_message }
+  menu:
+    kind: menu
+    note: Press 1 to book, 2 for the owner.
+    prompt: Press 1 to book, or 2 to reach the owner.
+    options: { "1": Book, "2": Owner }
+    exits: { "1": book, "2": handoff, no_input: leave_message, invalid: leave_message }
+  book:
+    kind: book
+    note: Thirty-minute slots.
+    prompt: Here are the next available times.
+    confirm_prompt: You're booked for
+    timezone: America/New_York
+    schedule:
+      tue: [{ open: "09:00", close: "17:00" }]
+    duration_mins: 30
+    exits: { booked: bye, no_slots: leave_message, no_input: leave_message, unavailable: leave_message }
+  handoff:
+    kind: transfer
+    note: The owner's mobile.
+    target: "+15555550123"
+  leave_message:
+    kind: message
+    note: Goes to voicemail.
+    prompt: Leave your name and number.
+  bye:
+    kind: hangup
+    note: Always end politely.
+    prompt: Goodbye.

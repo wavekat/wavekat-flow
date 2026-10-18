@@ -1,0 +1,6 @@
+{
+  "description": "Version 2 counterpart of v1/valid/unknown-field: unknown fields (top-level `color`, node-level `volume`) are ACCEPTED. This is what lets an older reader keep reading a newer document that carries a field it has never heard of; tightening it would break every installed daemon still running an older build.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] },
+  "tsWarnings": ["unknown_field"]
+}

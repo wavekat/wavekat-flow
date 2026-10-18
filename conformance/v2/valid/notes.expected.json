@@ -1,0 +1,5 @@
+{
+  "description": "The author's `note` on the flow and on every kind of step. A note is free text for people, never read by the engine, so it must not change any verdict. An older reader that predates `note` ignores it as an unknown field and must still read the document.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

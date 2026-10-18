@@ -118,6 +118,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "compat-old-readers"
+version = "0.0.0"
+dependencies = [
+ "wavekat-flow 0.0.11",
+ "wavekat-flow 0.0.6",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1550,6 +1558,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "wavekat-flow"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa8de375720073be7590b3e3a0cb70ef88569bc483c3938d147d7a02c12408ca"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "prettyplease",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "syn 2.0.119",
+ "thiserror 2.0.19",
+ "time",
+ "time-tz",
+ "typify",
 ]
 
 [[package]]
