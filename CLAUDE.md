@@ -27,6 +27,18 @@ shared tests. See `README.md` for the full design and the phased roadmap.
   outcome to make a build pass. Incompatible format changes get a new
   `schema_version` and a new `conformance/vN/` directory. This is the
   backward-compatibility guarantee.
+- **Older readers must keep reading newer documents.** Each consumer runs
+  the crate or package version it was built with, and installed devices
+  update late or never. So within one `schema_version`: never add
+  `additionalProperties: false` or `deny_unknown_fields`, and make every
+  new field optional and safe to ignore — an old reader that drops it
+  must still run the flow the same way. If ignoring a field would change
+  what a caller hears or where a call goes, it is not optional: bump
+  `schema_version`. `conformance/v1/valid/unknown-field.yaml` pins the
+  tolerance in both languages; keep it. When you add a field, add a
+  corpus case that uses it. Before releasing a format change, parse a
+  document that uses it with the oldest published crate still in use,
+  and say in the PR that you did.
 - **Both languages must stay green** on any schema change: `pnpm --filter
   @wavekat/flow-schema test` and `cargo test -p wavekat-flow`.
 - **Structure vs. semantics.** The schema owns shape only. Reachability, exit
