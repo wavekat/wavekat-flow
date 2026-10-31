@@ -107,6 +107,9 @@ pub enum StepDetail {
     MessageRecorded { secs: u32 },
     /// A blind transfer was placed.
     Transferred { target: String },
+    /// A screened transfer was attempted. `outcome` is `connected`,
+    /// `no_answer` or `failed`.
+    Screened { target: String, outcome: String },
     /// The flow spoke an optional goodbye and hung up.
     HungUp,
     /// A `book` node read the calendar and offered this many times.
