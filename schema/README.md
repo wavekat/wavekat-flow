@@ -9,9 +9,14 @@ version it declares, and no other.
 |---|---|---|
 | `flow.v1.schema.json` | `schema_version: 1` | the original seven components |
 | `flow.v2.schema.json` | `schema_version: 2` | `book` — appointment booking over the phone |
+| `flow.v3.schema.json` | `schema_version: 3` | `transfer` gains `whisper` and `timeout_secs` — a screened transfer |
 
 Version 2 is version 1 plus one component: every v1 document is a valid v2
 document once its `schema_version` is bumped, and nothing else changed.
+Version 3 is version 2 plus two optional fields on `transfer`: every v2
+document is a valid v3 document once its `schema_version` is bumped. The
+bump is for what the fields do, not for their shape. A reader that ignored
+`whisper` would hand the call over without calling the target first.
 
 Everything downstream is generated or checked against these files:
 

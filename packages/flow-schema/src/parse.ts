@@ -310,7 +310,7 @@ const NODE_CONFIG_FIELDS: Record<string, readonly string[]> = {
   menu: ['prompt', 'options', 'retries', 'timeout_secs'],
   ring: ['timeout_secs'],
   message: ['prompt', 'max_secs', 'tone'],
-  transfer: ['target'],
+  transfer: ['target', 'whisper', 'timeout_secs'],
   hangup: ['prompt'],
   book: [
     'prompt',
@@ -433,7 +433,26 @@ function decodeComponent(
     case 'transfer': {
       const targetField = required(fields, 'target', context, issues, at);
       const target = targetField && asString(targetField.value, `${context} target`, issues);
-      return target === undefined ? undefined : { kind, target };
+      if (target === undefined) return undefined;
+      const whisperField = fields.get('whisper');
+      const whisper = whisperField
+        ? decodePrompt(whisperField.value, `${context} whisper`, issues)
+        : undefined;
+      const timeoutField = fields.get('timeout_secs');
+      const timeout = timeoutField
+        ? asU32(timeoutField.value, `${context} timeout_secs`, issues)
+        : undefined;
+      // A field that is present but malformed already reported its issue;
+      // drop the whole node rather than run it without the field.
+      if ((whisperField && whisper === undefined) || (timeoutField && timeout === undefined)) {
+        return undefined;
+      }
+      return {
+        kind,
+        target,
+        ...(whisper !== undefined ? { whisper } : {}),
+        ...(timeout !== undefined ? { timeout_secs: timeout } : {}),
+      };
     }
     case 'hangup': {
       const promptField = fields.get('prompt');

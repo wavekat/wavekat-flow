@@ -8,13 +8,13 @@
 // are required, and their defaults all come from there, so a schema change
 // needs no change here.
 
-import { flowV2Schema } from './generated/schema.js';
+import { flowV3Schema } from './generated/schema.js';
 import type { Flow } from './model.js';
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type Schema = { [key: string]: unknown };
 
-const ROOT = flowV2Schema as unknown as Schema;
+const ROOT = flowV3Schema as unknown as Schema;
 
 /** Follow `$ref` (and a single-entry `allOf`, the schema's way of putting
  * a default next to a ref) to the schema that describes a value. */

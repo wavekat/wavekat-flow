@@ -64,6 +64,11 @@ fn yaml_cases(version: &str, bucket: &str) -> Vec<(String, PathBuf)> {
 
 fn yaml_cases_in(dir: &std::path::Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
+    // A version may have no cases in a bucket yet (v3 starts with `valid`
+    // only); a missing directory is an empty bucket, not an error.
+    if !dir.is_dir() {
+        return out;
+    }
     for entry in fs::read_dir(dir).expect("read corpus dir") {
         let path = entry.unwrap().path();
         if path.extension().and_then(|e| e.to_str()) == Some("yaml") {

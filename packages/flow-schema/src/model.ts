@@ -52,13 +52,13 @@ export type Component = Node;
 
 /** Schema versions this validator understands. Twin: `lib.rs`
  * `SUPPORTED_SCHEMA_VERSIONS`. */
-export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2];
+export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3];
 
 /** The newest version this build authors — what a new document should
  * declare. Reading stays broad ({@link SUPPORTED_SCHEMA_VERSIONS});
  * writing is deliberately one number. Twin: `lib.rs`
  * `CURRENT_SCHEMA_VERSION`. */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
  * `validate.rs` `MAX_PROMPT_CHARS`. */
@@ -245,7 +245,8 @@ export function isGeneratedClipRef(ref: string): boolean {
 }
 
 /** The prompts a node speaks. Most kinds have one; `book` has two (its
- * intro and its confirmation), and `hangup`'s is optional. */
+ * intro and its confirmation), and the prompt of `hangup` and the
+ * `whisper` of `transfer` are optional. */
 export function nodePrompts(node: Node): Prompt[] {
   switch (node.kind) {
     case 'greeting':
@@ -256,6 +257,8 @@ export function nodePrompts(node: Node): Prompt[] {
       return node.prompt === undefined ? [] : [node.prompt];
     case 'book':
       return [node.prompt, node.confirm_prompt];
+    case 'transfer':
+      return node.whisper === undefined ? [] : [node.whisper];
     default:
       return [];
   }

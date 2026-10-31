@@ -69,7 +69,7 @@ code per language — **pinned by the shared corpus**, not generated. See
 
 ## Versioning
 
-- `schema_version` is a property of the **document** (currently `2`). Each
+- `schema_version` is a property of the **document** (currently `3`). Each
   version gets its own `schema/flow.vN.schema.json` and its own frozen
   `conformance/vN/` corpus. Growth is additive; an unsupported version is
   rejected, never silently migrated.
@@ -78,6 +78,9 @@ code per language — **pinned by the shared corpus**, not generated. See
   has to be able to say "I don't run that version" — which is what makes it
   safe for the platform to hold back a document rather than hand over one that
   would fail to parse. `book` is why version 2 exists.
+- **A change in what a component does is a new version too.** A `transfer`
+  with a `whisper` is a screened transfer: an older build would ignore the
+  field and hand the call over blind. That is why version 3 exists.
 - The npm package and the Rust crate version **independently** of
   `schema_version` (they track implementation releases). A given package
   release advertises which `schema_version`s it understands via

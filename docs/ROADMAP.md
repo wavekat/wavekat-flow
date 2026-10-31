@@ -187,4 +187,5 @@ Trigger: the format is stable enough and the repo is ready to be public.
       validation dispatches on the document's declared version, and a
       per-kind minimum version in both validators is what tells an author
       "bump the version" instead of "fix the typo". `assistant` becomes
-      version 3.
+      version 4: version 3 went to the screened transfer (`transfer` gains
+      `whisper` and `timeout_secs`).
