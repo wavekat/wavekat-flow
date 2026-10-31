@@ -15,7 +15,7 @@ nodes:
   person:
     kind: transfer
     target: "+15551230100"
-    whisper: A candidate asked to speak to someone about an interview. Press any key to accept.
+    whisper: Interview reminder call. The candidate asked to talk to someone.
     timeout_secs: 20
     exits: { no_answer: desk }
   desk:
