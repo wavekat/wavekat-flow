@@ -34,14 +34,32 @@ impl Node {
         }
     }
 
-    /// Whether a caller who reaches this node can have the call *end* here.
-    /// `ring` counts — its implicit `answered` hands the call to a human,
-    /// which ends the flow. Used by the "no caller is ever trapped" check.
-    pub fn is_terminal(&self) -> bool {
+    /// Whether this is a *screened* transfer: one with a `whisper`, which
+    /// tells the person who picks up what the call is and waits for them
+    /// to accept it. It can fail to connect, so it has a `no_answer` exit
+    /// (a blind transfer hands the call over and is done). Twin:
+    /// `model.ts` `isScreenedTransfer`.
+    pub fn is_screened_transfer(&self) -> bool {
         matches!(
             self,
-            Node::Message { .. } | Node::Transfer { .. } | Node::Hangup { .. } | Node::Ring { .. }
+            Node::Transfer {
+                whisper: Some(_),
+                ..
+            }
         )
+    }
+
+    /// Whether a caller who reaches this node can have the call *end* here.
+    /// `ring` counts — its implicit `answered` hands the call to a human,
+    /// which ends the flow. A blind `transfer` ends it too; a screened one
+    /// may fall out of its `no_answer` exit instead, so it does not count
+    /// and the "no caller is ever trapped" check follows that exit.
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            Node::Transfer { .. } => !self.is_screened_transfer(),
+            Node::Message { .. } | Node::Hangup { .. } | Node::Ring { .. } => true,
+            _ => false,
+        }
     }
 
     /// The exit names this node **must** wire, given its config. Validation
@@ -69,6 +87,7 @@ impl Node {
                 "no_input".into(),
                 "unavailable".into(),
             ],
+            Node::Transfer { .. } if self.is_screened_transfer() => vec!["no_answer".into()],
             Node::Message { .. } | Node::Transfer { .. } | Node::Hangup { .. } => Vec::new(),
         }
     }
@@ -91,7 +110,8 @@ impl Node {
     }
 
     /// The prompts this node speaks. Most kinds have one; `book` has two
-    /// (its intro and its confirmation) and `hangup`'s is optional. Twin:
+    /// (its intro and its confirmation), and a `hangup`'s prompt and a
+    /// `transfer`'s whisper are optional. Twin:
     /// `model.ts` `nodePrompts`.
     pub fn prompts(&self) -> Vec<&Prompt> {
         match self {
@@ -99,12 +119,13 @@ impl Node {
             | Node::Menu { prompt, .. }
             | Node::Message { prompt, .. } => vec![prompt],
             Node::Hangup { prompt, .. } => prompt.iter().collect(),
+            Node::Transfer { whisper, .. } => whisper.iter().collect(),
             Node::Book {
                 prompt,
                 confirm_prompt,
                 ..
             } => vec![prompt, confirm_prompt],
-            Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
+            Node::Hours { .. } | Node::Ring { .. } => Vec::new(),
         }
     }
 
@@ -127,21 +148,23 @@ impl Node {
             | Node::Menu { prompt, .. }
             | Node::Message { prompt, .. } => vec![prompt],
             Node::Hangup { prompt, .. } => prompt.iter_mut().collect(),
+            Node::Transfer { whisper, .. } => whisper.iter_mut().collect(),
             Node::Book {
                 prompt,
                 confirm_prompt,
                 ..
             } => vec![prompt, confirm_prompt],
-            Node::Hours { .. } | Node::Ring { .. } | Node::Transfer { .. } => Vec::new(),
+            Node::Hours { .. } | Node::Ring { .. } => Vec::new(),
         };
         names.into_iter().zip(prompts).collect()
     }
 
     /// The field names of the prompts this node has: all of `fields`,
-    /// except a `hangup` with no goodbye has none.
+    /// except a `hangup` with no goodbye, or a `transfer` with no whisper,
+    /// has none.
     fn slot_names(&self, fields: &'static [&'static str]) -> Vec<&'static str> {
         match self {
-            Node::Hangup { prompt: None, .. } => Vec::new(),
+            Node::Hangup { prompt: None, .. } | Node::Transfer { whisper: None, .. } => Vec::new(),
             _ => fields.to_vec(),
         }
     }
@@ -170,7 +193,7 @@ pub fn required_assets(flow: &Flow) -> Vec<String> {
 }
 
 /// Every node field that can hold a prompt, across all kinds.
-pub const PROMPT_FIELDS: &[&str] = &["prompt", "confirm_prompt"];
+pub const PROMPT_FIELDS: &[&str] = &["prompt", "confirm_prompt", "whisper"];
 
 /// The fields a node of `kind` speaks a prompt from, in the order
 /// [`Node::prompts`] returns them, or `None` for a kind this build doesn't
@@ -180,8 +203,9 @@ pub const PROMPT_FIELDS: &[&str] = &["prompt", "confirm_prompt"];
 pub fn prompt_fields(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
         "greeting" | "menu" | "message" | "hangup" => Some(&PROMPT_FIELDS[..1]),
-        "book" => Some(PROMPT_FIELDS),
-        "hours" | "ring" | "transfer" => Some(&[]),
+        "book" => Some(&PROMPT_FIELDS[..2]),
+        "transfer" => Some(&PROMPT_FIELDS[2..]),
+        "hours" | "ring" => Some(&[]),
         _ => None,
     }
 }
@@ -282,6 +306,33 @@ impl Flow {
 #[cfg(test)]
 mod tests {
     use crate::model::Prompt;
+
+    #[test]
+    fn transfer_whisper_is_a_prompt_and_an_asset() {
+        let flow = crate::Flow::from_yaml(
+            r#"
+schema_version: 3
+id: f
+name: n
+entry: t
+nodes:
+  t:
+    kind: transfer
+    target: "+15551230100"
+    whisper: { audio: vprompt_whisper01 }
+    timeout_secs: 20
+  u:
+    kind: transfer
+    target: "+15551230101"
+"#,
+        )
+        .unwrap();
+        let t = &flow.nodes["t"];
+        assert_eq!(t.prompt_slots().len(), 1);
+        assert_eq!(t.prompt_slots()[0].0, "whisper");
+        assert!(flow.nodes["u"].prompt_slots().is_empty());
+        assert_eq!(super::required_assets(&flow), vec!["vprompt_whisper01"]);
+    }
 
     #[test]
     fn generated_clip_refs() {

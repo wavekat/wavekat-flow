@@ -1,0 +1,5 @@
+{
+  "description": "`timeout_secs` is how long a screened transfer waits for the person to accept. A transfer with no `whisper` is blind and never waits, so the field means nothing there and is refused rather than ignored.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["timeout_without_whisper"] }
+}

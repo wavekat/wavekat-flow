@@ -58,15 +58,20 @@ pub use model_ext::{
 /// package).
 pub const FLOW_V1_SCHEMA: &str = include_str!("../schema/flow.v1.schema.json");
 
-/// Format version 2 — version 1 plus the `book` component. This is also
-/// the file the model types are generated from, being the newest.
+/// Format version 2 — version 1 plus the `book` component.
 pub const FLOW_V2_SCHEMA: &str = include_str!("../schema/flow.v2.schema.json");
+
+/// Format version 3 — version 2 plus the screened transfer (`transfer`
+/// gains `whisper` and `timeout_secs`). This is also the file the model
+/// types are generated from, being the newest.
+pub const FLOW_V3_SCHEMA: &str = include_str!("../schema/flow.v3.schema.json");
 
 /// The schema for a declared version, or `None` if this build has none.
 pub fn flow_schema(version: u32) -> Option<&'static str> {
     match version {
         1 => Some(FLOW_V1_SCHEMA),
         2 => Some(FLOW_V2_SCHEMA),
+        3 => Some(FLOW_V3_SCHEMA),
         _ => None,
     }
 }
@@ -77,9 +82,9 @@ pub fn flow_schema(version: u32) -> Option<&'static str> {
 /// This is what a daemon advertises and the platform refuses to serve
 /// past: a device that only knows version 1 must never be handed a
 /// document that uses a component it has no code for.
-pub const SUPPORTED_SCHEMA_VERSIONS: &[u32] = &[1, 2];
+pub const SUPPORTED_SCHEMA_VERSIONS: &[u32] = &[1, 2, 3];
 
 /// The newest version this build authors. Reading stays broad
 /// ([`SUPPORTED_SCHEMA_VERSIONS`]); writing is deliberately one number.
 /// Twin: `model.ts` `CURRENT_SCHEMA_VERSION`.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;

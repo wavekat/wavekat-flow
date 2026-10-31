@@ -1,0 +1,9 @@
+schema_version: 3
+id: flow_screened_no_exit
+name: Screened transfer with no way out
+entry: person
+nodes:
+  person:
+    kind: transfer
+    target: "+15551230100"
+    whisper: A caller asked to talk to someone.

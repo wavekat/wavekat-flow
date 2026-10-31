@@ -1,4 +1,4 @@
-// GENERATED from schema/flow.v{1,2}.schema.json by scripts/generate.mjs — do not edit.
+// GENERATED from schema/flow.v{1,2,3}.schema.json by scripts/generate.mjs — do not edit.
 // Run `pnpm gen` after changing a schema; CI fails on drift.
 
 /**
@@ -16,11 +16,11 @@ export type Text = string;
 export type MessageTone = 'beep' | 'none';
 
 /**
- * The WaveKat call-flow ("Receptionist") document, schema_version 2. Version 2 is version 1 plus the `book` component (appointment booking over the phone); every version-1 document is a valid version-2 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
+ * The WaveKat call-flow ("Receptionist") document, schema_version 3. Version 3 is version 2 plus the screened transfer: the `transfer` node gains `whisper` and `timeout_secs`. Every version-2 document is a valid version-3 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
  */
 export interface Flow {
   /**
-   * Document format version. This file describes version 2 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
+   * Document format version. This file describes version 3 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
    */
   schema_version: number;
   /**
@@ -191,7 +191,7 @@ export interface MessageNode {
   [k: string]: unknown;
 }
 /**
- * Blind-transfer to an external number. Terminal.
+ * Hand the call to an external number. With `whisper`, a screened transfer: call the target first, play the whisper, and connect only when they accept; otherwise take `no_answer`. Without it, a blind transfer (terminal). `whisper` is spoken to the person at the target before they are connected, and `timeout_secs` is how long to let the target ring or decide. Both apply only to a screened transfer.
  */
 export interface TransferNode {
   kind: 'transfer';
@@ -200,6 +200,8 @@ export interface TransferNode {
    */
   note?: string;
   target: string;
+  whisper?: Prompt;
+  timeout_secs?: number;
   exits?: Exits;
   [k: string]: unknown;
 }

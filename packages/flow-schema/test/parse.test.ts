@@ -142,6 +142,44 @@ nodes:
     expect(issues.filter((issue) => issue.code === 'unknown_field')).toHaveLength(0);
   });
 
+  it('keeps a transfer whisper and timeout without warning, and counts the whisper clip', () => {
+    const { flow, issues } = parseFlow(`
+schema_version: 3
+id: f
+name: n
+entry: t
+nodes:
+  t:
+    kind: transfer
+    target: "+15551230100"
+    whisper: { audio: vprompt_whisper01, transcript: A caller wants a person. }
+    timeout_secs: 20
+`);
+    const node = flow?.nodes['t'];
+    expect(node?.kind === 'transfer' && node.whisper).toEqual({
+      audio: 'vprompt_whisper01',
+      transcript: 'A caller wants a person.',
+    });
+    expect(node?.kind === 'transfer' && node.timeout_secs).toBe(20);
+    expect(issues.filter((issue) => issue.code === 'unknown_field')).toHaveLength(0);
+    expect(flow ? requiredAssets(flow) : []).toEqual(['vprompt_whisper01']);
+  });
+
+  it('rejects a malformed transfer whisper or timeout', () => {
+    const { issues } = parseFlow(`
+schema_version: 3
+id: f
+name: n
+entry: t
+nodes:
+  t:
+    kind: transfer
+    target: "+15551230100"
+    timeout_secs: soon
+`);
+    expect(issues.some((issue) => issue.severity === 'error')).toBe(true);
+  });
+
   it('rejects a non-string audio prompt transcript', () => {
     const { issues } = parseFlow(`
 schema_version: 1

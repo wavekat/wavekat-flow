@@ -1,0 +1,13 @@
+schema_version: 3
+id: flow_timeout_range
+name: Waiting too long for a person
+entry: person
+nodes:
+  person:
+    kind: transfer
+    target: "+15551230100"
+    whisper: A caller asked to talk to someone.
+    timeout_secs: 300
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup

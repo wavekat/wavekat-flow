@@ -46,6 +46,8 @@ type Expectation = {
 
 function casesIn(version: string, bucket: string): string[] {
   const dir = resolve(corpusRoot, version, bucket);
+  // A version may have no cases in a bucket yet; a missing directory is empty.
+  if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.endsWith('.yaml'))
     .map((f) => f.slice(0, -'.yaml'.length));

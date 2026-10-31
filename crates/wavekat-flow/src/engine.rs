@@ -133,6 +133,22 @@ pub enum RingOutcome {
     NoAnswer,
 }
 
+/// Result of a screened `transfer`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScreenOutcome {
+    /// The person picked up, heard the whisper and accepted — they own the
+    /// call now and the engine steps out.
+    Connected,
+    /// Nobody picked up, or they declined, within the window.
+    NoAnswer,
+    /// The attempt could not be made or broke down (the reason is for logs).
+    Failed(String),
+}
+
+/// How long a screened transfer waits for the person when the node sets no
+/// `timeout_secs`.
+pub const DEFAULT_SCREEN_TIMEOUT_SECS: u64 = 25;
+
 /// The side effects the components need. The engine calls these; the impl
 /// performs the telephony/audio. `&mut self` because a real impl holds the
 /// live call. Methods return `anyhow::Result` so the daemon impl can surface
@@ -159,6 +175,23 @@ pub trait FlowEffects: Send {
 
     /// Blind-transfer the call to `target`.
     async fn transfer(&mut self, target: &str) -> anyhow::Result<()>;
+
+    /// Screened transfer: ring `target`, play `whisper` to whoever picks up,
+    /// and connect the caller only once they accept. `NoAnswer` and `Failed`
+    /// leave the caller on the line, so the flow continues from the node's
+    /// `no_answer` exit.
+    ///
+    /// The default reports `Failed`, so an implementor that cannot screen
+    /// (and predates this method) still compiles and the flow falls through
+    /// to its `no_answer` exit instead of aborting.
+    async fn screened_transfer(
+        &mut self,
+        _target: &str,
+        _whisper: &Prompt,
+        _timeout: Duration,
+    ) -> anyhow::Result<ScreenOutcome> {
+        Ok(ScreenOutcome::Failed("not available on this call".into()))
+    }
 
     /// Speak an optional goodbye and end the call.
     async fn hangup(&mut self, prompt: Option<&Prompt>) -> anyhow::Result<()>;
@@ -357,6 +390,41 @@ async fn run_node<E: FlowEffects>(
                 .map_err(EngineError::Effect)?;
             trace.push(id, kind, StepDetail::MessageRecorded { secs });
             Ok(Step::End(FlowOutcome::MessageLeft))
+        }
+
+        Node::Transfer {
+            target,
+            whisper: Some(whisper),
+            timeout_secs,
+            ..
+        } => {
+            let timeout = Duration::from_secs(
+                timeout_secs
+                    .map(|s| s.max(0) as u64)
+                    .unwrap_or(DEFAULT_SCREEN_TIMEOUT_SECS),
+            );
+            let outcome = fx
+                .screened_transfer(target, whisper, timeout)
+                .await
+                .map_err(EngineError::Effect)?;
+            let (label, connected) = match outcome {
+                ScreenOutcome::Connected => ("connected", true),
+                ScreenOutcome::NoAnswer => ("no_answer", false),
+                ScreenOutcome::Failed(_) => ("failed", false),
+            };
+            trace.push(
+                id,
+                kind,
+                StepDetail::Screened {
+                    target: target.clone(),
+                    outcome: label.into(),
+                },
+            );
+            if connected {
+                Ok(Step::End(FlowOutcome::Transferred))
+            } else {
+                goto(id, node, "no_answer")
+            }
         }
 
         Node::Transfer { target, .. } => {
@@ -678,8 +746,10 @@ mod tests {
         now: OffsetDateTime,
         digits: VecDeque<Option<Digit>>,
         ring: RingOutcome,
+        screen: ScreenOutcome,
         message_secs: u32,
         // observed:
+        screened: Option<(String, Duration)>,
         spoken: Vec<String>,
         transferred: Option<String>,
         recorded: bool,
@@ -706,6 +776,8 @@ mod tests {
                 now,
                 digits: VecDeque::new(),
                 ring: RingOutcome::NoAnswer,
+                screen: ScreenOutcome::NoAnswer,
+                screened: None,
                 message_secs: 0,
                 spoken: Vec::new(),
                 transferred: None,
@@ -740,6 +812,10 @@ mod tests {
         }
         fn ring(mut self, r: RingOutcome) -> Self {
             self.ring = r;
+            self
+        }
+        fn screen(mut self, o: ScreenOutcome) -> Self {
+            self.screen = o;
             self
         }
         fn message_secs(mut self, s: u32) -> Self {
@@ -786,6 +862,15 @@ mod tests {
         async fn transfer(&mut self, target: &str) -> anyhow::Result<()> {
             self.transferred = Some(target.to_string());
             Ok(())
+        }
+        async fn screened_transfer(
+            &mut self,
+            target: &str,
+            _whisper: &Prompt,
+            timeout: Duration,
+        ) -> anyhow::Result<ScreenOutcome> {
+            self.screened = Some((target.to_string(), timeout));
+            Ok(self.screen.clone())
         }
         async fn hangup(&mut self, prompt: Option<&Prompt>) -> anyhow::Result<()> {
             if let Some(p) = prompt {
@@ -1312,5 +1397,177 @@ nodes:
         let trace = run_trace(&flow, &mut fx).await;
         assert_eq!(trace.outcome, FlowOutcome::Transferred);
         assert_eq!(fx.transferred.as_deref(), Some("sip:desk@example.com"));
+    }
+
+    const SCREENED: &str = r#"
+schema_version: 3
+id: f
+name: n
+entry: t
+nodes:
+  t:
+    kind: transfer
+    target: sip:desk@example.com
+    whisper: Outbound call for you
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup
+"#;
+
+    const SCREENED_TIMEOUT: &str = r#"
+schema_version: 3
+id: f
+name: n
+entry: t
+nodes:
+  t:
+    kind: transfer
+    target: sip:desk@example.com
+    whisper: Outbound call for you
+    timeout_secs: 40
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup
+"#;
+
+    async fn run_screened(src: &str, fx: &mut MockEffects) -> Trace {
+        let flow = Flow::from_yaml(src).unwrap();
+        validate(&flow).unwrap();
+        run_trace(&flow, fx).await
+    }
+
+    fn screened_step(trace: &Trace) -> &StepDetail {
+        &trace
+            .steps
+            .iter()
+            .find(|s| matches!(s.detail, StepDetail::Screened { .. }))
+            .expect("a Screened step")
+            .detail
+    }
+
+    #[tokio::test]
+    async fn screened_transfer_connected_ends_transferred() {
+        let mut fx = MockEffects::new(open_time()).screen(ScreenOutcome::Connected);
+        let trace = run_screened(SCREENED, &mut fx).await;
+        assert_eq!(trace.outcome, FlowOutcome::Transferred);
+        assert_eq!(
+            trace.steps.last().unwrap().detail,
+            StepDetail::Screened {
+                target: "sip:desk@example.com".into(),
+                outcome: "connected".into()
+            }
+        );
+        assert!(!fx.hung_up);
+    }
+
+    #[tokio::test]
+    async fn screened_transfer_no_answer_takes_exit() {
+        let mut fx = MockEffects::new(open_time()).screen(ScreenOutcome::NoAnswer);
+        let trace = run_screened(SCREENED, &mut fx).await;
+        assert_eq!(
+            screened_step(&trace),
+            &StepDetail::Screened {
+                target: "sip:desk@example.com".into(),
+                outcome: "no_answer".into()
+            }
+        );
+        assert_eq!(trace.steps.last().unwrap().detail, StepDetail::HungUp);
+        assert!(fx.hung_up);
+        assert!(fx.transferred.is_none());
+    }
+
+    #[tokio::test]
+    async fn screened_transfer_failed_takes_exit() {
+        let mut fx = MockEffects::new(open_time()).screen(ScreenOutcome::Failed("boom".into()));
+        let trace = run_screened(SCREENED, &mut fx).await;
+        assert_eq!(
+            screened_step(&trace),
+            &StepDetail::Screened {
+                target: "sip:desk@example.com".into(),
+                outcome: "failed".into()
+            }
+        );
+        assert_eq!(trace.steps.last().unwrap().detail, StepDetail::HungUp);
+        assert!(fx.hung_up);
+    }
+
+    #[tokio::test]
+    async fn screened_transfer_default_timeout_is_25s() {
+        let mut fx = MockEffects::new(open_time());
+        run_screened(SCREENED, &mut fx).await;
+        assert_eq!(
+            fx.screened,
+            Some(("sip:desk@example.com".into(), Duration::from_secs(25)))
+        );
+    }
+
+    #[tokio::test]
+    async fn screened_transfer_uses_node_timeout() {
+        let mut fx = MockEffects::new(open_time());
+        run_screened(SCREENED_TIMEOUT, &mut fx).await;
+        assert_eq!(
+            fx.screened,
+            Some(("sip:desk@example.com".into(), Duration::from_secs(40)))
+        );
+    }
+
+    /// An effects impl written before `screened_transfer` existed: the
+    /// default must not abort the call.
+    struct LegacyEffects {
+        hung_up: bool,
+    }
+
+    #[async_trait]
+    impl FlowEffects for LegacyEffects {
+        async fn speak(&mut self, _p: &Prompt) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn collect_digit(&mut self, _t: Duration) -> anyhow::Result<Option<Digit>> {
+            Ok(None)
+        }
+        async fn ring_human(&mut self, _t: Duration) -> anyhow::Result<RingOutcome> {
+            Ok(RingOutcome::NoAnswer)
+        }
+        async fn record_message(
+            &mut self,
+            _tone: MessageTone,
+            _m: Duration,
+        ) -> anyhow::Result<u32> {
+            Ok(0)
+        }
+        async fn transfer(&mut self, _t: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn hangup(&mut self, _p: Option<&Prompt>) -> anyhow::Result<()> {
+            self.hung_up = true;
+            Ok(())
+        }
+        async fn fetch_slots(&mut self, _q: &SlotQuery<'_>) -> anyhow::Result<SlotOffer> {
+            anyhow::bail!("unused")
+        }
+        async fn book_slot(&mut self, _s: &Slot) -> anyhow::Result<BookOutcome> {
+            anyhow::bail!("unused")
+        }
+        fn now(&self) -> OffsetDateTime {
+            open_time()
+        }
+    }
+
+    #[tokio::test]
+    async fn default_screened_transfer_impl_fails_gracefully() {
+        let flow = Flow::from_yaml(SCREENED).unwrap();
+        validate(&flow).unwrap();
+        let mut fx = LegacyEffects { hung_up: false };
+        let mut trace = Trace::new(&flow.id, flow.version);
+        run(&flow, &mut fx, &mut trace).await;
+        assert_eq!(
+            screened_step(&trace),
+            &StepDetail::Screened {
+                target: "sip:desk@example.com".into(),
+                outcome: "failed".into()
+            }
+        );
+        assert!(fx.hung_up);
+        assert_ne!(trace.outcome, FlowOutcome::Aborted);
     }
 }

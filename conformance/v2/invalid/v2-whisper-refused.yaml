@@ -1,0 +1,12 @@
+schema_version: 2
+id: flow_v2_whisper
+name: Whisper in a version 2 document
+entry: person
+nodes:
+  person:
+    kind: transfer
+    target: "+15551230100"
+    whisper: A caller asked to talk to someone. Press any key to accept.
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup

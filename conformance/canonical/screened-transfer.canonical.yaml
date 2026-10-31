@@ -1,0 +1,13 @@
+schema_version: 3
+id: flow_screened_canon
+name: Hand the call to a person
+entry: person
+nodes:
+  person:
+    kind: transfer
+    target: "+15551230100"
+    whisper: { audio: vprompt_whisper01, transcript: A caller asked to talk to someone. }
+    timeout_secs: 20
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup

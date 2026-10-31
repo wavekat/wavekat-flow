@@ -1,0 +1,13 @@
+schema_version: 3
+id: flow_outbound_no_answer_loop
+name: Outbound ring that retries for ever
+entry: front
+nodes:
+  front:
+    kind: ring
+    timeout_secs: 20
+    exits: { no_answer: again }
+  again:
+    kind: greeting
+    prompt: Nobody picked up, trying again.
+    exits: { next: front }

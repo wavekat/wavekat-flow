@@ -1,0 +1,5 @@
+{
+  "description": "A reminder call that can hand the callee to a person: a menu, then a screened transfer, then a `ring` step as the second try, then a goodbye. Version 3 lets an outbound call use `ring` and a screened `transfer`; the loop back to the menu needs a key press, so it is bounded.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

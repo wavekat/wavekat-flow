@@ -8,7 +8,7 @@
 // One model, many schemas. Each schema file describes exactly one
 // `schema_version` and is what a document of that version is validated
 // against (see src/structure.ts). The *types*, though, have to hold any
-// supported version — a consumer reads v1 and v2 documents through one
+// supported version — a consumer reads v1, v2 and v3 documents through one
 // `Flow` — so codegen runs on the NEWEST schema only, which is a
 // superset of its predecessors, with one mechanical relaxation applied
 // (below). The Rust twin does the same in crates/wavekat-flow/build.rs.
@@ -24,7 +24,7 @@ const repoRoot = resolve(pkg, '..', '..');
 const genDir = resolve(pkg, 'src', 'generated');
 
 // Oldest first; the last entry is the one the model is generated from.
-const VERSIONS = [1, 2];
+const VERSIONS = [1, 2, 3];
 const schemaPathFor = (v) => resolve(repoRoot, 'schema', `flow.v${v}.schema.json`);
 
 await mkdir(genDir, { recursive: true });

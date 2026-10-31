@@ -1,0 +1,5 @@
+{
+  "description": "A screened transfer can fail to connect, so it must wire `no_answer`; without it a person who never picks up leaves the caller with nowhere to go. A blind transfer (no whisper) has no exits, which is why the shape alone cannot say so.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["missing_exits"] }
+}

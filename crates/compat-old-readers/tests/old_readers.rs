@@ -149,3 +149,22 @@ fn old_reader_refuses_versions_it_does_not_know() {
     let flow = old_flow::Flow::from_yaml(yaml).expect("parses; the version gate is validate");
     assert!(old_validate(&flow).is_err());
 }
+
+#[test]
+fn old_reader_refuses_a_screened_transfer_rather_than_run_it_blind() {
+    // `whisper` is what makes a transfer screened. A reader that parses the
+    // document but does not know the field would drop it and hand the call
+    // over blind, so the document declares version 3 and the old reader must
+    // refuse that version. It parses (unknown keys are tolerated); the
+    // refusal is the validation gate.
+    let yaml = fs::read_to_string(corpus().join("v3/valid/screened-transfer.yaml")).unwrap();
+    let old = old_flow::Flow::from_yaml(&yaml).expect("parses; unknown keys are tolerated");
+    assert!(
+        !old_flow::SUPPORTED_SCHEMA_VERSIONS.contains(&schema_version(&yaml)),
+        "{OLDEST_READER} claims to read version 3"
+    );
+    assert!(old_validate(&old).is_err());
+    assert!(
+        wavekat_flow::validate::validate(&wavekat_flow::Flow::from_yaml(&yaml).unwrap()).is_ok()
+    );
+}

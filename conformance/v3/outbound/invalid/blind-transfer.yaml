@@ -1,0 +1,12 @@
+schema_version: 3
+id: flow_outbound_blind
+name: Outbound blind transfer
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: Connecting you now.
+    exits: { next: forward }
+  forward:
+    kind: transfer
+    target: "+15551230100"

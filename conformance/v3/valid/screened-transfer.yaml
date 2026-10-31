@@ -1,0 +1,27 @@
+schema_version: 3
+id: flow_screened_transfer
+name: Hand the call to a person
+version: 1
+entry: ask
+nodes:
+  ask:
+    kind: menu
+    prompt: Press 1 to talk to a person.
+    options:
+      "1": A person
+    exits:
+      "1": person
+      no_input: goodbye
+      invalid: goodbye
+  person:
+    kind: transfer
+    target: "+15551230100"
+    whisper:
+      audio: vprompt_whisper01
+      transcript: A caller asked to talk to someone.
+    timeout_secs: 20
+    exits:
+      no_answer: goodbye
+  goodbye:
+    kind: hangup
+    prompt: Goodbye.

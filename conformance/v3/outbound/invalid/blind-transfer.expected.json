@@ -1,0 +1,5 @@
+{
+  "description": "Outbound calls may transfer from version 3, but only a screened transfer: the person who picks up hears a whisper first. A blind transfer would drop the callee on someone who did not know a call was coming. The same document is a valid inbound flow.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_blind_transfer"] }
+}
