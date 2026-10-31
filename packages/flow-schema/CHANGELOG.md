@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.15](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.14...flow-schema-v0.0.15) (2026-10-31)
+
+
+### Features
+
+* screened transfer in flow schema v3 ([#57](https://github.com/wavekat/wavekat-flow/issues/57)) ([aad735a](https://github.com/wavekat/wavekat-flow/commit/aad735ae38afb5c00e77e6134dd9bd2f88a4aa39))
+
 ## [0.0.14](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.13...flow-schema-v0.0.14) (2026-10-17)
 
 
