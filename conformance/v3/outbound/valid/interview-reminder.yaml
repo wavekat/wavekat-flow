@@ -1,0 +1,32 @@
+schema_version: 3
+id: flow_interview_reminder
+name: Interview reminder with a hand-off
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: This is a reminder about your interview tomorrow.
+    exits: { next: ask }
+  ask:
+    kind: menu
+    prompt: Press 1 to confirm, or 2 to speak to someone.
+    options: { "1": Confirm, "2": Speak to someone }
+    exits: { "1": thanks, "2": person, no_input: bye, invalid: ask }
+  person:
+    kind: transfer
+    target: "+15551230100"
+    whisper: A candidate asked to speak to someone about an interview. Press any key to accept.
+    timeout_secs: 20
+    exits: { no_answer: desk }
+  desk:
+    kind: ring
+    timeout_secs: 20
+    exits: { no_answer: sorry }
+  sorry:
+    kind: hangup
+    prompt: Sorry, nobody is free right now. We will call you back.
+  thanks:
+    kind: hangup
+    prompt: Thank you, see you tomorrow.
+  bye:
+    kind: hangup

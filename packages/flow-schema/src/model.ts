@@ -60,6 +60,16 @@ export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3];
  * `CURRENT_SCHEMA_VERSION`. */
 export const CURRENT_SCHEMA_VERSION = 3;
 
+/** The shortest and longest a screened transfer may ring the person's
+ * phone, in seconds. Twin: `validate.rs` `MIN_TRANSFER_TIMEOUT_SECS` /
+ * `MAX_TRANSFER_TIMEOUT_SECS`; the schema carries the same bounds. */
+export const MIN_TRANSFER_TIMEOUT_SECS = 5;
+export const MAX_TRANSFER_TIMEOUT_SECS = 120;
+
+/** The oldest `schema_version` that may put `whisper` or `timeout_secs` on
+ * a `transfer`. Twin: `validate.rs` `TRANSFER_FIELDS_MIN_SCHEMA_VERSION`. */
+export const TRANSFER_FIELDS_MIN_SCHEMA_VERSION = 3;
+
 /** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
  * `validate.rs` `MAX_PROMPT_CHARS`. */
 export const MAX_PROMPT_CHARS = 2000;
@@ -140,7 +150,17 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
  * Twin: `validate.rs` `required_schema_version`.
  */
 export function requiredSchemaVersion(flow: Flow): number {
-  return Math.max(1, ...Object.values(flow.nodes).map((node) => KIND_MIN_SCHEMA_VERSION[node.kind]));
+  return Math.max(
+    1,
+    ...Object.values(flow.nodes).map((node) =>
+      Math.max(
+        KIND_MIN_SCHEMA_VERSION[node.kind],
+        node.kind === 'transfer' && (node.whisper !== undefined || node.timeout_secs !== undefined)
+          ? TRANSFER_FIELDS_MIN_SCHEMA_VERSION
+          : 1,
+      ),
+    ),
+  );
 }
 
 /**
@@ -163,12 +183,34 @@ export const DEFAULT_MESSAGE_TONE: MessageTone = 'beep';
 // ── Helpers (logic layered on the generated types) ───────────────────────
 
 /**
- * Whether a caller who reaches this component can have the call *end*
- * here. `ring` counts — its implicit `answered` hands the call to a
- * human, which ends the flow.
+ * Whether this is a *screened* transfer: one with a `whisper`, which tells
+ * the person who picks up what the call is and waits for them to accept
+ * it. It can fail to connect, so it has a `no_answer` exit (a blind
+ * transfer hands the call over and is done). Twin: `model_ext.rs`
+ * `Node::is_screened_transfer`.
  */
-export function isTerminal(kind: string): boolean {
-  return kind === 'message' || kind === 'transfer' || kind === 'hangup' || kind === 'ring';
+export function isScreenedTransfer(node: Node): boolean {
+  return node.kind === 'transfer' && node.whisper !== undefined;
+}
+
+/**
+ * Whether a caller who reaches this node can have the call *end* here.
+ * `ring` counts — its implicit `answered` hands the call to a human,
+ * which ends the flow. A blind `transfer` ends it too; a screened one may
+ * fall out of its `no_answer` exit instead, so it does not count and the
+ * "no caller is ever trapped" check follows that exit.
+ */
+export function isTerminal(node: Node): boolean {
+  switch (node.kind) {
+    case 'message':
+    case 'hangup':
+    case 'ring':
+      return true;
+    case 'transfer':
+      return !isScreenedTransfer(node);
+    default:
+      return false;
+  }
 }
 
 /**
@@ -192,8 +234,9 @@ export function requiredExits(node: Node): string[] {
     // the day Google has an outage.
     case 'book':
       return ['booked', 'no_slots', 'no_input', 'unavailable'];
-    case 'message':
     case 'transfer':
+      return isScreenedTransfer(node) ? ['no_answer'] : [];
+    case 'message':
     case 'hangup':
       return [];
     default:

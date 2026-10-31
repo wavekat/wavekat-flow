@@ -1,0 +1,15 @@
+# Screened transfer, written the way a person might: fields out of order,
+# the whisper as a clip with its transcript, and a comment to drop.
+schema_version: 3
+name: Hand the call to a person
+id: flow_screened_canon
+entry: person
+nodes:
+  person:
+    exits: { no_answer: bye }
+    timeout_secs: 20
+    whisper: { transcript: A caller asked to talk to someone., audio: vprompt_whisper01 }
+    target: "+15551230100"
+    kind: transfer
+  bye:
+    kind: hangup

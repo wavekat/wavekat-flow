@@ -1,0 +1,5 @@
+{
+  "description": "A version 2 document may not use `whisper` (or `timeout_secs`) on a transfer: an engine that only knows version 2 would ignore the whisper and hand the call over blind, so the field needs the version that has it. Added with version 3; the v2 cases around it are untouched.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["field_requires_newer_schema"] }
+}

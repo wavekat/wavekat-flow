@@ -1,0 +1,6 @@
+{
+  "description": "A screened transfer: a `transfer` with a `whisper` calls the target first and connects only when they accept, so it needs a `no_answer` exit for the case where they don't. The whisper clip is part of the assets a daemon must have before it arms the flow.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] },
+  "requiredAssets": ["vprompt_whisper01"]
+}

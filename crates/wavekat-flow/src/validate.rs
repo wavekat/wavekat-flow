@@ -30,6 +30,16 @@ const MAX_PROMPT_CHARS: usize = 2000;
 /// `packages/flow-schema/src/model.ts` `VALID_DIGITS`.
 const VALID_DIGITS: &[&str] = &["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#"];
 
+/// The shortest and longest a screened transfer may ring the person's
+/// phone, in seconds. Twin: `model.ts` `MIN_TRANSFER_TIMEOUT_SECS` /
+/// `MAX_TRANSFER_TIMEOUT_SECS`; the schema carries the same bounds.
+const MIN_TRANSFER_TIMEOUT_SECS: i64 = 5;
+const MAX_TRANSFER_TIMEOUT_SECS: i64 = 120;
+
+/// The oldest `schema_version` that may put `whisper` or `timeout_secs`
+/// on a `transfer`. Twin: `model.ts` `TRANSFER_FIELDS_MIN_SCHEMA_VERSION`.
+const TRANSFER_FIELDS_MIN_SCHEMA_VERSION: u32 = 3;
+
 /// One thing wrong with a flow document. Carries enough context (node id,
 /// exit name, offending value) for the editor to point at it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -109,8 +119,34 @@ pub enum ValidationError {
         declared: i64,
     },
 
+    #[error(
+        "transfer node {node:?} sets {field}, which needs schema_version {required} (this document declares {declared})"
+    )]
+    FieldRequiresNewerSchema {
+        node: NodeId,
+        field: &'static str,
+        required: u32,
+        declared: i64,
+    },
+
+    #[error("transfer node {node:?} sets timeout_secs but has no whisper to screen with")]
+    TimeoutWithoutWhisper { node: NodeId },
+
+    #[error("transfer node {node:?} timeout_secs is {value} (allowed: {min}–{max})")]
+    TransferTimeoutOutOfRange {
+        node: NodeId,
+        value: i64,
+        min: i64,
+        max: i64,
+    },
+
     #[error("node {node:?} is a {kind} step, which an outbound call cannot run")]
     OutboundNodeNotAllowed { node: NodeId, kind: &'static str },
+
+    #[error(
+        "transfer node {node:?} has no whisper: an outbound call must screen the person it hands the callee to"
+    )]
+    OutboundBlindTransfer { node: NodeId },
 
     #[error(
         "node {node:?} is on a loop that never waits for the callee, so an outbound call could repeat it forever"
@@ -144,7 +180,11 @@ impl ValidationError {
             ValidationError::BookOutOfRange { .. } => "book_out_of_range",
             ValidationError::BookNeverOpen { .. } => "book_never_open",
             ValidationError::KindRequiresNewerSchema { .. } => "kind_requires_newer_schema",
+            ValidationError::FieldRequiresNewerSchema { .. } => "field_requires_newer_schema",
+            ValidationError::TimeoutWithoutWhisper { .. } => "timeout_without_whisper",
+            ValidationError::TransferTimeoutOutOfRange { .. } => "transfer_timeout_out_of_range",
             ValidationError::OutboundNodeNotAllowed { .. } => "outbound_node_not_allowed",
+            ValidationError::OutboundBlindTransfer { .. } => "outbound_blind_transfer",
             ValidationError::OutboundUnboundedLoop { .. } => "outbound_unbounded_loop",
         }
     }
@@ -175,7 +215,19 @@ fn kind_min_schema_version(kind: &str) -> i64 {
 pub fn required_schema_version(flow: &Flow) -> i64 {
     flow.nodes
         .values()
-        .map(|node| kind_min_schema_version(node.kind()))
+        .map(|node| {
+            let fields = match node {
+                Node::Transfer {
+                    whisper,
+                    timeout_secs,
+                    ..
+                } if whisper.is_some() || timeout_secs.is_some() => {
+                    i64::from(TRANSFER_FIELDS_MIN_SCHEMA_VERSION)
+                }
+                _ => 1,
+            };
+            kind_min_schema_version(node.kind()).max(fields)
+        })
         .max()
         .unwrap_or(1)
 }
@@ -207,6 +259,7 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
     for (id, node) in &flow.nodes {
         check_exits(id, node, flow, &mut errs);
         check_node(id, node, &mut errs);
+        check_transfer_fields_version(id, node, flow.schema_version, &mut errs);
 
         // A component the document's own version doesn't have. Checked
         // per node rather than once per flow so the editor points at the
@@ -237,13 +290,70 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
     }
 }
 
-/// The kinds a flow may use when it runs on a call the app *places*, with
-/// no person standing by. Twin: `validate.ts` `OUTBOUND_KINDS`.
+/// `whisper` and `timeout_secs` on a document older than the version that
+/// has them. Reported per field, so the editor can say which one to drop
+/// or which version to raise.
+fn check_transfer_fields_version(
+    id: &NodeId,
+    node: &Node,
+    declared: i64,
+    errs: &mut Vec<ValidationError>,
+) {
+    let Node::Transfer {
+        whisper,
+        timeout_secs,
+        ..
+    } = node
+    else {
+        return;
+    };
+    if declared >= i64::from(TRANSFER_FIELDS_MIN_SCHEMA_VERSION) {
+        return;
+    }
+    for (field, present) in [
+        ("whisper", whisper.is_some()),
+        ("timeout_secs", timeout_secs.is_some()),
+    ] {
+        if present {
+            errs.push(ValidationError::FieldRequiresNewerSchema {
+                node: id.clone(),
+                field,
+                required: TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
+                declared,
+            });
+        }
+    }
+}
+
+/// The kinds a flow may use on a call the app *places*, as of
+/// `schema_version` 2 and earlier: no person is standing by. Kept for
+/// compatibility; [`outbound_kinds`] is the version-aware list. Twin:
+/// `validate.ts` `OUTBOUND_KINDS`.
 ///
 /// Left out: `ring` (there is nobody to hand the call to), `book` (it
 /// books against the number that called in, which an outbound call does
-/// not have), and `transfer` (not offered on outbound calls yet).
+/// not have), and `transfer` (not offered on outbound calls before
+/// version 3).
 pub const OUTBOUND_KINDS: &[&str] = &["greeting", "menu", "message", "hangup", "hours"];
+
+/// [`OUTBOUND_KINDS`] plus what version 3 adds: `ring` and `transfer`,
+/// because a person can now be reached on purpose. `transfer` must be
+/// screened (see [`validate_outbound`]).
+const OUTBOUND_KINDS_V3: &[&str] = &[
+    "greeting", "menu", "message", "hangup", "hours", "ring", "transfer",
+];
+
+/// The kinds a flow declaring `schema_version` may use on an outbound
+/// call. Version 2 and earlier get [`OUTBOUND_KINDS`], so a frozen
+/// document keeps its verdict; version 3 adds `ring` and `transfer`.
+/// Twin: `validate.ts` `outboundKinds`.
+pub fn outbound_kinds(schema_version: u32) -> &'static [&'static str] {
+    if schema_version >= 3 {
+        OUTBOUND_KINDS_V3
+    } else {
+        OUTBOUND_KINDS
+    }
+}
 
 /// Validate a flow for an **outbound** call: everything [`validate`] checks,
 /// plus the rules for a call the app places itself.
@@ -254,10 +364,14 @@ pub const OUTBOUND_KINDS: &[&str] = &["greeting", "menu", "message", "hangup", "
 ///
 /// The outbound rules:
 ///
-/// - every node is one of [`OUTBOUND_KINDS`] (`outbound_node_not_allowed`);
+/// - every node is one of [`outbound_kinds`] for the document's version
+///   (`outbound_node_not_allowed`);
+/// - a `transfer` must be screened, i.e. carry a `whisper`
+///   (`outbound_blind_transfer`) — the callee never lands on a person who
+///   did not know a call was coming;
 /// - no loop reachable from `entry` is made only of moves that happen
-///   without the callee — any exit of a `greeting` or `hours` step, or a
-///   `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
+///   without the callee — any exit of a `greeting`, `hours` or `ring` step
+///   or a screened `transfer`, or a `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
 ///   callee who stays silent, would never end (`outbound_unbounded_loop`).
 ///   A loop through a menu's digit or `invalid` exits is fine: only a
 ///   callee pressing keys can take it.
@@ -265,16 +379,19 @@ pub const OUTBOUND_KINDS: &[&str] = &["greeting", "menu", "message", "hangup", "
 /// Twin: `validate.ts` `validateOutbound`.
 pub fn validate_outbound(flow: &Flow) -> Result<(), Vec<ValidationError>> {
     let mut errs = validate(flow).err().unwrap_or_default();
+    let allowed = outbound_kinds(flow.schema_version.clamp(0, i64::from(u32::MAX)) as u32);
 
     // In id order, so the errors come out the same every time.
     let mut nodes: Vec<(&NodeId, &Node)> = flow.nodes.iter().collect();
     nodes.sort_by_key(|(id, _)| *id);
     for (id, node) in nodes {
-        if !OUTBOUND_KINDS.contains(&node.kind()) {
+        if !allowed.contains(&node.kind()) {
             errs.push(ValidationError::OutboundNodeNotAllowed {
                 node: id.clone(),
                 kind: node.kind(),
             });
+        } else if matches!(node, Node::Transfer { .. }) && !node.is_screened_transfer() {
+            errs.push(ValidationError::OutboundBlindTransfer { node: id.clone() });
         }
     }
 
@@ -292,12 +409,18 @@ pub fn validate_outbound(flow: &Flow) -> Result<(), Vec<ValidationError>> {
 }
 
 /// The exits a node takes without the callee doing anything: every exit of
-/// a `greeting` (always `next`) or `hours` step (picked by the clock), and a
+/// a `greeting` (always `next`), `hours` (picked by the clock), `ring` or
+/// screened `transfer` step (`no_answer`: nobody picked up), and a
 /// `menu`'s `no_input` (taken when nobody presses a key — voicemail, say).
 fn silent_exits(node: &Node) -> Vec<&str> {
     let exits = node.exits().into_iter().flatten();
     match node {
-        Node::Greeting { .. } | Node::Hours { .. } => exits.map(|(_, t)| t.as_str()).collect(),
+        Node::Greeting { .. } | Node::Hours { .. } | Node::Ring { .. } => {
+            exits.map(|(_, t)| t.as_str()).collect()
+        }
+        Node::Transfer { .. } if node.is_screened_transfer() => {
+            exits.map(|(_, t)| t.as_str()).collect()
+        }
         Node::Menu { .. } => exits
             .filter(|(key, _)| key.as_str() == "no_input")
             .map(|(_, t)| t.as_str())
@@ -438,9 +561,30 @@ fn check_node(id: &NodeId, node: &Node, errs: &mut Vec<ValidationError>) {
         }
         Node::Ring { .. } => {}
         Node::Message { prompt, .. } => check_prompt(id, prompt, errs),
-        Node::Transfer { target, .. } => {
+        Node::Transfer {
+            target,
+            whisper,
+            timeout_secs,
+            ..
+        } => {
             if target.trim().is_empty() {
                 errs.push(ValidationError::EmptyTransferTarget { node: id.clone() });
+            }
+            if let Some(p) = whisper {
+                check_prompt(id, p, errs);
+            }
+            if let Some(value) = *timeout_secs {
+                if whisper.is_none() {
+                    errs.push(ValidationError::TimeoutWithoutWhisper { node: id.clone() });
+                }
+                if !(MIN_TRANSFER_TIMEOUT_SECS..=MAX_TRANSFER_TIMEOUT_SECS).contains(&value) {
+                    errs.push(ValidationError::TransferTimeoutOutOfRange {
+                        node: id.clone(),
+                        value,
+                        min: MIN_TRANSFER_TIMEOUT_SECS,
+                        max: MAX_TRANSFER_TIMEOUT_SECS,
+                    });
+                }
             }
         }
         Node::Hangup { prompt, .. } => {
@@ -1118,5 +1262,265 @@ nodes:
         let codes = outbound_codes(src);
         assert!(codes.contains(&"unreachable"), "{codes:?}");
         assert!(!codes.contains(&"outbound_unbounded_loop"), "{codes:?}");
+    }
+
+    // ── screened transfer (schema_version 3) ─────────────────────────────
+
+    const SCREENED: &str = r#"
+schema_version: 3
+id: f
+name: n
+entry: t
+nodes:
+  t:
+    kind: transfer
+    target: "+15551234567"
+    whisper: Press 1 to accept this call.
+    timeout_secs: 20
+    exits: { no_answer: bye }
+  bye:
+    kind: hangup
+"#;
+
+    fn codes(src: &str) -> Vec<&'static str> {
+        validate(&parse(src))
+            .err()
+            .unwrap_or_default()
+            .iter()
+            .map(ValidationError::code)
+            .collect()
+    }
+
+    #[test]
+    fn a_screened_transfer_validates() {
+        assert_eq!(validate(&parse(SCREENED)), Ok(()));
+    }
+
+    #[test]
+    fn screened_transfer_requires_no_answer() {
+        let src = SCREENED.replace("    exits: { no_answer: bye }\n", "");
+        assert!(codes(&src).contains(&"missing_exits"), "{:?}", codes(&src));
+    }
+
+    #[test]
+    fn blind_transfer_has_no_exits_in_v3() {
+        let src = SCREENED
+            .replace("    whisper: Press 1 to accept this call.\n", "")
+            .replace("    timeout_secs: 20\n", "");
+        assert_eq!(codes(&src), vec!["unexpected_exits"]);
+        let blind = src.replace("    exits: { no_answer: bye }\n", "");
+        assert!(!codes(&blind).contains(&"unexpected_exits"));
+    }
+
+    #[test]
+    fn whisper_in_v2_needs_v3() {
+        let src = SCREENED
+            .replace("schema_version: 3", "schema_version: 2")
+            .replace("    timeout_secs: 20\n", "");
+        let errs = validate(&parse(&src)).unwrap_err();
+        assert!(errs.contains(&ValidationError::FieldRequiresNewerSchema {
+            node: "t".into(),
+            field: "whisper",
+            required: 3,
+            declared: 2,
+        }));
+        assert_eq!(errs[0].code(), "field_requires_newer_schema");
+    }
+
+    #[test]
+    fn timeout_in_v2_needs_v3() {
+        let src = SCREENED
+            .replace("schema_version: 3", "schema_version: 1")
+            .replace("    whisper: Press 1 to accept this call.\n", "")
+            .replace("    exits: { no_answer: bye }\n", "");
+        let errs = validate(&parse(&src)).unwrap_err();
+        assert!(errs.contains(&ValidationError::FieldRequiresNewerSchema {
+            node: "t".into(),
+            field: "timeout_secs",
+            required: 3,
+            declared: 1,
+        }));
+        assert!(errs.contains(&ValidationError::TimeoutWithoutWhisper { node: "t".into() }));
+    }
+
+    #[test]
+    fn timeout_without_whisper_refused() {
+        let src = SCREENED
+            .replace("    whisper: Press 1 to accept this call.\n", "")
+            .replace("    exits: { no_answer: bye }\n", "");
+        assert!(codes(&src).contains(&"timeout_without_whisper"));
+    }
+
+    #[test]
+    fn transfer_timeout_is_bounded() {
+        for (value, ok) in [
+            (4, false),
+            (5, true),
+            (120, true),
+            (121, false),
+            (-1, false),
+        ] {
+            let src = SCREENED.replace("timeout_secs: 20", &format!("timeout_secs: {value}"));
+            let errs = validate(&parse(&src)).err().unwrap_or_default();
+            assert_eq!(errs.is_empty(), ok, "timeout_secs {value}: {errs:?}");
+            if !ok {
+                assert_eq!(
+                    errs,
+                    vec![ValidationError::TransferTimeoutOutOfRange {
+                        node: "t".into(),
+                        value,
+                        min: 5,
+                        max: 120,
+                    }]
+                );
+                assert_eq!(errs[0].code(), "transfer_timeout_out_of_range");
+            }
+        }
+    }
+
+    #[test]
+    fn an_overlong_whisper_is_refused() {
+        let src = SCREENED.replace(
+            "Press 1 to accept this call.",
+            &"a".repeat(MAX_PROMPT_CHARS + 1),
+        );
+        assert_eq!(codes(&src), vec!["prompt_too_long"]);
+    }
+
+    #[test]
+    fn a_screened_transfer_needs_v3() {
+        assert_eq!(required_schema_version(&parse(SCREENED)), 3);
+        let timeout_only = SCREENED.replace("    whisper: Press 1 to accept this call.\n", "");
+        assert_eq!(required_schema_version(&parse(&timeout_only)), 3);
+        let blind = timeout_only.replace("    timeout_secs: 20\n", "");
+        assert_eq!(required_schema_version(&parse(&blind)), 1);
+    }
+
+    #[test]
+    fn a_screened_transfer_that_only_loops_traps_the_caller() {
+        // The hand-over can succeed, but a callee who never gets picked up
+        // must still reach an end.
+        let src = SCREENED.replace("no_answer: bye", "no_answer: t");
+        assert!(codes(&src).contains(&"trapped"), "{:?}", codes(&src));
+    }
+
+    #[test]
+    fn outbound_kinds_by_version() {
+        assert_eq!(outbound_kinds(1), OUTBOUND_KINDS);
+        assert_eq!(outbound_kinds(2), OUTBOUND_KINDS);
+        assert_eq!(
+            outbound_kinds(3),
+            ["greeting", "menu", "message", "hangup", "hours", "ring", "transfer"]
+        );
+    }
+
+    const HANDOFF: &str = r#"
+schema_version: 3
+id: f
+name: n
+entry: hello
+nodes:
+  hello:
+    kind: greeting
+    prompt: This is a reminder about your appointment.
+    exits: { next: ask }
+  ask:
+    kind: menu
+    prompt: Press 1 to talk to someone, or 2 to confirm.
+    options: { "1": Talk, "2": Confirm }
+    exits: { "1": connect, "2": thanks, no_input: bye, invalid: ask }
+  connect:
+    kind: transfer
+    target: "+15551234567"
+    whisper: Press 1 to accept this call.
+    exits: { no_answer: sorry }
+  sorry:
+    kind: message
+    prompt: Nobody is free right now. Leave a message.
+  thanks:
+    kind: hangup
+    prompt: Thanks.
+  bye:
+    kind: hangup
+"#;
+
+    #[test]
+    fn v3_outbound_allows_ring_and_screened_transfer() {
+        assert_eq!(validate_outbound(&parse(HANDOFF)), Ok(()));
+        let with_ring = HANDOFF.replace(
+            "    exits: { no_answer: sorry }\n",
+            "    exits: { no_answer: desk }\n  desk:\n    kind: ring\n    timeout_secs: 20\n    exits: { no_answer: sorry }\n",
+        );
+        assert_eq!(validate_outbound(&parse(&with_ring)), Ok(()));
+    }
+
+    #[test]
+    fn v3_outbound_refuses_blind_transfer() {
+        let src = HANDOFF
+            .replace("    whisper: Press 1 to accept this call.\n", "")
+            .replace("    exits: { no_answer: sorry }\n", "");
+        let errs = validate_outbound(&parse(&src)).unwrap_err();
+        assert!(errs.contains(&ValidationError::OutboundBlindTransfer {
+            node: "connect".into()
+        }));
+        assert!(!outbound_codes(&src).contains(&"outbound_node_not_allowed"));
+    }
+
+    #[test]
+    fn no_answer_loop_is_unbounded() {
+        // ring -> greeting -> ring, with no key press anywhere in between.
+        let src = r#"
+schema_version: 3
+id: f
+name: n
+entry: r
+nodes:
+  r:
+    kind: ring
+    timeout_secs: 20
+    exits: { no_answer: again }
+  again:
+    kind: greeting
+    prompt: Trying again.
+    exits: { next: r }
+  bye:
+    kind: hangup
+"#;
+        let codes = outbound_codes(src);
+        assert!(codes.contains(&"outbound_unbounded_loop"), "{codes:?}");
+    }
+
+    #[test]
+    fn a_screened_transfer_retrying_without_a_keypress_is_unbounded() {
+        // hello -> ask -(no_input)-> connect -(no_answer)-> hello: voicemail
+        // would pick up, ring out, and go round again for ever.
+        let src = HANDOFF
+            .replace("no_answer: sorry", "no_answer: hello")
+            .replace(
+                "no_input: bye, invalid: ask",
+                "no_input: connect, invalid: sorry",
+            )
+            .replace("  bye:\n    kind: hangup\n", "");
+        assert_eq!(validate(&parse(&src)), Ok(()));
+        assert_eq!(
+            outbound_codes(&src),
+            vec![
+                "outbound_unbounded_loop",
+                "outbound_unbounded_loop",
+                "outbound_unbounded_loop"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_loop_that_needs_a_keypress_is_bounded() {
+        // hello -> ask -(1)-> connect -(no_answer)-> hello: only a callee
+        // pressing 1 can take the menu's digit exit.
+        let src = HANDOFF
+            .replace("no_answer: sorry", "no_answer: hello")
+            .replace("no_input: bye", "no_input: sorry")
+            .replace("  bye:\n    kind: hangup\n", "");
+        assert_eq!(validate(&parse(&src)), Ok(()));
+        assert_eq!(validate_outbound(&parse(&src)), Ok(()));
     }
 }

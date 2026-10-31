@@ -34,14 +34,32 @@ impl Node {
         }
     }
 
-    /// Whether a caller who reaches this node can have the call *end* here.
-    /// `ring` counts — its implicit `answered` hands the call to a human,
-    /// which ends the flow. Used by the "no caller is ever trapped" check.
-    pub fn is_terminal(&self) -> bool {
+    /// Whether this is a *screened* transfer: one with a `whisper`, which
+    /// tells the person who picks up what the call is and waits for them
+    /// to accept it. It can fail to connect, so it has a `no_answer` exit
+    /// (a blind transfer hands the call over and is done). Twin:
+    /// `model.ts` `isScreenedTransfer`.
+    pub fn is_screened_transfer(&self) -> bool {
         matches!(
             self,
-            Node::Message { .. } | Node::Transfer { .. } | Node::Hangup { .. } | Node::Ring { .. }
+            Node::Transfer {
+                whisper: Some(_),
+                ..
+            }
         )
+    }
+
+    /// Whether a caller who reaches this node can have the call *end* here.
+    /// `ring` counts — its implicit `answered` hands the call to a human,
+    /// which ends the flow. A blind `transfer` ends it too; a screened one
+    /// may fall out of its `no_answer` exit instead, so it does not count
+    /// and the "no caller is ever trapped" check follows that exit.
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            Node::Transfer { .. } => !self.is_screened_transfer(),
+            Node::Message { .. } | Node::Hangup { .. } | Node::Ring { .. } => true,
+            _ => false,
+        }
     }
 
     /// The exit names this node **must** wire, given its config. Validation
@@ -69,6 +87,7 @@ impl Node {
                 "no_input".into(),
                 "unavailable".into(),
             ],
+            Node::Transfer { .. } if self.is_screened_transfer() => vec!["no_answer".into()],
             Node::Message { .. } | Node::Transfer { .. } | Node::Hangup { .. } => Vec::new(),
         }
     }

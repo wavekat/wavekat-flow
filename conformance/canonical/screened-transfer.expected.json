@@ -1,0 +1,4 @@
+{
+  "description": "A transfer carrying `whisper` and `timeout_secs` (schema_version 3) is written in schema property order (`target`, `whisper`, `timeout_secs`, `exits`), the whisper clip keeps its transcript, and the text is a fixed point. Neither field equals a default, so both are written.",
+  "comments": 2
+}

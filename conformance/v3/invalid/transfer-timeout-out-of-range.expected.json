@@ -1,0 +1,5 @@
+{
+  "description": "`timeout_secs` on a transfer is 5 to 120. The schema says so, and the validator says so again, so a caller that skips the structural pass still cannot publish a transfer that waits five minutes.",
+  "structurallyValid": false,
+  "semantic": { "ok": false, "errors": ["transfer_timeout_out_of_range"] }
+}

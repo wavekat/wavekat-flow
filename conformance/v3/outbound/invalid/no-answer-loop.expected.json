@@ -1,0 +1,5 @@
+{
+  "description": "`no_answer` happens without the callee, like a menu's `no_input`, so ring -> greeting -> ring never needs anyone to do anything and would redial for ever.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["outbound_unbounded_loop"] }
+}

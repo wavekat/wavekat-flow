@@ -41,7 +41,7 @@ export type { ParseResult } from './parse.js';
 export type { Comment } from './parse.js';
 export { findComments, parseFlow } from './parse.js';
 export { serializeFlow } from './serialize.js';
-export { OUTBOUND_KINDS, validateFlow, validateOutbound } from './validate.js';
+export { OUTBOUND_KINDS, outboundKinds, validateFlow, validateOutbound } from './validate.js';
 export type { FlowCheck } from './check.js';
 export { checkFlow } from './check.js';
 export { isValidDate, isValidTimezone, parseTimeMinutes, validateHours } from './hours.js';

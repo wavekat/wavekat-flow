@@ -12,12 +12,16 @@
 // and menu/hours sanity caps. All problems are collected (not
 // fail-fast) so the editor can show every one at once.
 
-import type { BookNode, ComponentKind, Flow, Prompt } from './model.js';
+import type { BookNode, ComponentKind, Flow, Prompt, TransferNode } from './model.js';
 import {
   KIND_MIN_SCHEMA_VERSION,
   MAX_PROMPT_CHARS,
+  MAX_TRANSFER_TIMEOUT_SECS,
+  MIN_TRANSFER_TIMEOUT_SECS,
   SUPPORTED_SCHEMA_VERSIONS,
+  TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
   VALID_DIGITS,
+  isScreenedTransfer,
   isTerminal,
   promptText,
   requiredExits,
@@ -162,6 +166,7 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
             message: `transfer node "${id}" has an empty target`,
           });
         }
+        checkTransferFields(id, node, flow.schema_version, issues, at);
         break;
       case 'hangup':
         if (node.prompt !== undefined) checkPrompt(id, node.prompt, issues, at);
@@ -201,6 +206,54 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
   if (entryExists) checkGraph(flow, issues, at);
 
   return issues;
+}
+
+/**
+ * What a `transfer` may say about screening: the whisper is a prompt like
+ * any other, `timeout_secs` means nothing without one and is bounded, and
+ * both need a document that declares a version that has them.
+ */
+function checkTransferFields(
+  id: string,
+  node: TransferNode,
+  declared: number,
+  issues: Issue[],
+  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+): void {
+  if (node.whisper !== undefined) checkPrompt(id, node.whisper, issues, at);
+  const timeout = node.timeout_secs;
+  if (timeout !== undefined) {
+    if (node.whisper === undefined) {
+      issues.push({
+        ...at(id),
+        code: 'timeout_without_whisper',
+        message: `transfer node "${id}" sets timeout_secs but has no whisper to screen with`,
+      });
+    }
+    if (timeout < MIN_TRANSFER_TIMEOUT_SECS || timeout > MAX_TRANSFER_TIMEOUT_SECS) {
+      issues.push({
+        ...at(id),
+        code: 'transfer_timeout_out_of_range',
+        message: `transfer node "${id}" timeout_secs is ${timeout} (allowed: ${MIN_TRANSFER_TIMEOUT_SECS}–${MAX_TRANSFER_TIMEOUT_SECS})`,
+        params: {
+          value: timeout,
+          min: MIN_TRANSFER_TIMEOUT_SECS,
+          max: MAX_TRANSFER_TIMEOUT_SECS,
+        },
+      });
+    }
+  }
+  if (declared < TRANSFER_FIELDS_MIN_SCHEMA_VERSION) {
+    for (const field of ['whisper', 'timeout_secs'] as const) {
+      if (node[field] === undefined) continue;
+      issues.push({
+        ...at(id),
+        code: 'field_requires_newer_schema',
+        message: `transfer node "${id}" sets ${field}, which needs schema_version ${TRANSFER_FIELDS_MIN_SCHEMA_VERSION} (this document declares ${declared})`,
+        params: { field, required: TRANSFER_FIELDS_MIN_SCHEMA_VERSION, declared },
+      });
+    }
+  }
 }
 
 /**
@@ -292,7 +345,7 @@ function checkGraph(
   // target qualifies.
   const canEnd = new Set<string>();
   for (const [id, node] of Object.entries(flow.nodes)) {
-    if (isTerminal(node.kind)) canEnd.add(id);
+    if (isTerminal(node)) canEnd.add(id);
   }
   let grew = true;
   while (grew) {
@@ -345,12 +398,15 @@ function reachableFromEntry(flow: Flow): Set<string> {
 // ── Outbound profile ─────────────────────────────────────────────────────
 
 /**
- * The kinds a flow may use when it runs on a call the app *places*, with
- * no person standing by. Twin: `validate.rs` `OUTBOUND_KINDS`.
+ * The kinds a flow may use on a call the app *places*, as of
+ * `schema_version` 2 and earlier: no person is standing by. Kept for
+ * compatibility; {@link outboundKinds} is the version-aware list. Twin:
+ * `validate.rs` `OUTBOUND_KINDS`.
  *
  * Left out: `ring` (there is nobody to hand the call to), `book` (it
  * books against the number that called in, which an outbound call does
- * not have), and `transfer` (not offered on outbound calls yet).
+ * not have), and `transfer` (not offered on outbound calls before
+ * version 3).
  */
 export const OUTBOUND_KINDS: readonly ComponentKind[] = [
   'greeting',
@@ -359,6 +415,19 @@ export const OUTBOUND_KINDS: readonly ComponentKind[] = [
   'hangup',
   'hours',
 ];
+
+const OUTBOUND_KINDS_V3: readonly ComponentKind[] = [...OUTBOUND_KINDS, 'ring', 'transfer'];
+
+/**
+ * The kinds a flow declaring `schemaVersion` may use on an outbound call.
+ * Version 2 and earlier get {@link OUTBOUND_KINDS}, so a frozen document
+ * keeps its verdict; version 3 adds `ring` and `transfer`, because a
+ * person can now be reached on purpose. `transfer` must be screened (see
+ * {@link validateOutbound}). Twin: `validate.rs` `outbound_kinds`.
+ */
+export function outboundKinds(schemaVersion: number): readonly ComponentKind[] {
+  return schemaVersion >= 3 ? OUTBOUND_KINDS_V3 : OUTBOUND_KINDS;
+}
 
 /**
  * Validate a flow for an **outbound** call: everything `validateFlow`
@@ -369,10 +438,14 @@ export const OUTBOUND_KINDS: readonly ComponentKind[] = [
  *
  * The outbound rules:
  *
- * - every node is one of `OUTBOUND_KINDS` (`outbound_node_not_allowed`);
+ * - every node is one of `outboundKinds` for the document's version
+ *   (`outbound_node_not_allowed`);
+ * - a `transfer` must be screened, i.e. carry a `whisper`
+ *   (`outbound_blind_transfer`) — the callee never lands on a person who
+ *   did not know a call was coming;
  * - no loop reachable from `entry` is made only of moves that happen
- *   without the callee — any exit of a `greeting` or `hours` step, or a
- *   `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
+ *   without the callee — any exit of a `greeting`, `hours` or `ring` step
+ *   or a screened `transfer`, or a `menu`'s `no_input` exit. Such a loop, played into voicemail or to a
  *   callee who stays silent, would never end (`outbound_unbounded_loop`).
  *   A loop through a menu's digit or `invalid` exits is fine: only a
  *   callee pressing keys can take it.
@@ -387,14 +460,22 @@ export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue
     range: nodeRanges[node],
   });
 
+  const allowed = outboundKinds(flow.schema_version);
   for (const id of Object.keys(flow.nodes).sort()) {
     const node = flow.nodes[id];
-    if (node && !OUTBOUND_KINDS.includes(node.kind as ComponentKind)) {
+    if (!node) continue;
+    if (!allowed.includes(node.kind as ComponentKind)) {
       issues.push({
         ...at(id),
         code: 'outbound_node_not_allowed',
         message: `node "${id}" is a ${node.kind} step, which an outbound call cannot run`,
         params: { kind: node.kind },
+      });
+    } else if (node.kind === 'transfer' && !isScreenedTransfer(node)) {
+      issues.push({
+        ...at(id),
+        code: 'outbound_blind_transfer',
+        message: `transfer node "${id}" has no whisper: an outbound call must screen the person it hands the callee to`,
       });
     }
   }
@@ -411,7 +492,8 @@ export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue
 }
 
 /** The exits a node takes without the callee doing anything: every exit of
- * a `greeting` (always `next`) or `hours` step (picked by the clock), and a
+ * a `greeting` (always `next`), `hours` (picked by the clock), `ring` or
+ * screened `transfer` step (`no_answer`: nobody picked up), and a
  * `menu`'s `no_input` (taken when nobody presses a key — voicemail, say). */
 function silentExits(node: Flow['nodes'][string] | undefined): string[] {
   if (!node) return [];
@@ -419,7 +501,10 @@ function silentExits(node: Flow['nodes'][string] | undefined): string[] {
   switch (node.kind) {
     case 'greeting':
     case 'hours':
+    case 'ring':
       return exits.map(([, target]) => target);
+    case 'transfer':
+      return isScreenedTransfer(node) ? exits.map(([, target]) => target) : [];
     case 'menu':
       return exits.filter(([key]) => key === 'no_input').map(([, target]) => target);
     default:
