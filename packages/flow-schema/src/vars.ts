@@ -25,9 +25,7 @@ export function isVariableName(name: string): boolean {
   return NAME_RE.test(name);
 }
 
-type Tok =
-  | { t: 'text'; v: string }
-  | { t: 'var' | 'open' | 'close'; v: string };
+type Tok = { t: 'text'; v: string } | { t: 'var' | 'open' | 'close'; v: string };
 
 /** Split `s` into tokens. `unclosed` is true when a `{{` has no `}}`. */
 function tokens(s: string): { toks: Tok[]; unclosed: boolean } {
