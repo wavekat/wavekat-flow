@@ -197,8 +197,14 @@ fn render(segments: &[Segment<'_>], effective: &dyn Fn(&str) -> String, out: &mu
 /// exactly `{{name}}` with an empty value is removed, with its exit. An audio
 /// prompt with a `template` stays audio (dropping the template) unless a
 /// variable it names got a non-default value; then it becomes the filled
-/// text. A flow without variables comes back as a clone. A malformed template is left as written (validation rejects those
-/// before fill is reached).
+/// text. A flow without variables comes back as a clone. A malformed template
+/// is left as written (validation rejects those before fill is reached).
+///
+/// Contract: validate the source flow first (`validate_outbound`); the result
+/// is not meant to be re-validated (a value may itself hold `{{`). `fill`
+/// keeps options and exits consistent on its own. Errors: `variable_unknown`,
+/// `variable_too_long`, and `menu_without_options` when every option of a menu
+/// would be dropped.
 pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<FillError>> {
     // No variables: `{{` is ordinary text (v1-v3), so there is nothing to fill.
     if flow.variables.is_empty() && values.is_empty() {
