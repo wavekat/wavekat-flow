@@ -206,6 +206,20 @@ mod tests {
     }
 
     #[test]
+    fn brace_edge_cases() {
+        assert_eq!(
+            parse_template("{{{a}}}"),
+            Err(TemplateError::BadName("{a".into()))
+        );
+        assert_eq!(
+            parse_template("{ {a} }").unwrap(),
+            vec![Segment::Text("{ {a} }")]
+        );
+        assert_eq!(parse_template("}}").unwrap(), vec![Segment::Text("}}")]);
+        assert_eq!(parse_template("{{#a}} x {{"), Err(TemplateError::Unclosed));
+    }
+
+    #[test]
     fn names_are_listed_once_in_order() {
         assert_eq!(
             template_names("{{b}} {{#a}}{{a}}{{/a}} {{b}}"),

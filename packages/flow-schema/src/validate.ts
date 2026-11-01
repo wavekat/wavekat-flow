@@ -12,7 +12,14 @@
 // and menu/hours sanity caps. All problems are collected (not
 // fail-fast) so the editor can show every one at once.
 
-import type { BookNode, ComponentKind, Flow, Node, Prompt, TransferNode } from './model.js';
+import type {
+  BookNode,
+  ComponentKind,
+  Flow,
+  Node,
+  Prompt,
+  TransferNode,
+} from "./model.js";
 import {
   KIND_MIN_SCHEMA_VERSION,
   MAX_PROMPT_CHARS,
@@ -31,7 +38,7 @@ import {
   promptTemplate,
   promptText,
   requiredExits,
-} from './model.js';
+} from "./model.js";
 import {
   DEFAULT_BOOK_BUFFER_MINS,
   DEFAULT_BOOK_HORIZON_DAYS,
@@ -45,10 +52,10 @@ import {
   MIN_BOOK_DURATION_MINS,
   bookVocabularyRefs,
   parseBookVocabularyRef,
-} from './book.js';
-import type { Issue } from './issues.js';
-import { isVariableName, templateNames, tryParseTemplate } from './vars.js';
-import { validateHours } from './hours.js';
+} from "./book.js";
+import type { Issue } from "./issues.js";
+import { isVariableName, templateNames, tryParseTemplate } from "./vars.js";
+import { validateHours } from "./hours.js";
 
 type NodeRanges = Record<string, [number, number]>;
 
@@ -59,16 +66,16 @@ type NodeRanges = Record<string, [number, number]>;
  */
 export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
   const issues: Issue[] = [];
-  const at = (node: string): Pick<Issue, 'severity' | 'node' | 'range'> => ({
-    severity: 'error',
+  const at = (node: string): Pick<Issue, "severity" | "node" | "range"> => ({
+    severity: "error",
     node,
     range: nodeRanges[node],
   });
 
   if (!SUPPORTED_SCHEMA_VERSIONS.includes(flow.schema_version)) {
     issues.push({
-      severity: 'error',
-      code: 'unsupported_schema_version',
+      severity: "error",
+      code: "unsupported_schema_version",
       message: `schema_version ${flow.schema_version} is not supported`,
       params: { version: flow.schema_version },
     });
@@ -76,13 +83,16 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
 
   // Flow-level, so it carries no node. Same code as a transfer field on an
   // older document: the field needs a newer version than the one declared.
-  if (hasVariables(flow) && flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) {
+  if (
+    hasVariables(flow) &&
+    flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION
+  ) {
     issues.push({
-      severity: 'error',
-      code: 'field_requires_newer_schema',
+      severity: "error",
+      code: "field_requires_newer_schema",
       message: `variables needs schema_version ${VARIABLES_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
       params: {
-        field: 'variables',
+        field: "variables",
         required: VARIABLES_MIN_SCHEMA_VERSION,
         declared: flow.schema_version,
       },
@@ -94,57 +104,49 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
 
   const nodeIds = Object.keys(flow.nodes);
   if (nodeIds.length === 0) {
-    issues.push({ severity: 'error', code: 'empty_flow', message: 'flow has no nodes' });
+    issues.push({
+      severity: "error",
+      code: "empty_flow",
+      message: "flow has no nodes",
+    });
     return issues; // graph checks below would be meaningless
   }
 
   const entryExists = flow.entry in flow.nodes;
   if (!entryExists) {
     issues.push({
-      severity: 'error',
-      code: 'missing_entry',
+      severity: "error",
+      code: "missing_entry",
       message: `entry "${flow.entry}" is not a node`,
       params: { entry: flow.entry },
     });
   }
 
   for (const [id, node] of Object.entries(flow.nodes)) {
-    if (
-      flow.schema_version < TEMPLATE_MIN_SCHEMA_VERSION &&
-      nodePrompts(node).some((p) => promptTemplate(p) !== null)
-    ) {
-      issues.push({
-        ...at(id),
-        code: 'field_requires_newer_schema',
-        message: `node "${id}" gives a prompt a template, which needs schema_version ${TEMPLATE_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
-        params: {
-          field: 'template',
-          required: TEMPLATE_MIN_SCHEMA_VERSION,
-          declared: flow.schema_version,
-        },
-      });
-    }
-    checkPlaceholders(id, node, flow, issues, at, mentioned);
     const exits = node.exits ?? {};
     // Exit keys must be exactly the set the component defines, and
     // every target must exist.
     const requiredNames = new Set(requiredExits(node));
     const presentNames = new Set(Object.keys(exits));
-    const missing = [...requiredNames].filter((name) => !presentNames.has(name)).sort();
+    const missing = [...requiredNames]
+      .filter((name) => !presentNames.has(name))
+      .sort();
     if (missing.length > 0) {
       issues.push({
         ...at(id),
-        code: 'missing_exits',
-        message: `node "${id}" (${node.kind}) is missing required exits: ${missing.join(', ')}`,
+        code: "missing_exits",
+        message: `node "${id}" (${node.kind}) is missing required exits: ${missing.join(", ")}`,
         params: { kind: node.kind, missing },
       });
     }
-    const unexpected = [...presentNames].filter((name) => !requiredNames.has(name)).sort();
+    const unexpected = [...presentNames]
+      .filter((name) => !requiredNames.has(name))
+      .sort();
     if (unexpected.length > 0) {
       issues.push({
         ...at(id),
-        code: 'unexpected_exits',
-        message: `node "${id}" (${node.kind}) has exits it does not define: ${unexpected.join(', ')}`,
+        code: "unexpected_exits",
+        message: `node "${id}" (${node.kind}) has exits it does not define: ${unexpected.join(", ")}`,
         params: { kind: node.kind, unexpected },
       });
     }
@@ -156,7 +158,7 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
           // corpus (conformance/v1/invalid/dangling-exit). The platform's
           // pre-consolidation copy emitted `unknown_exit_target`; the corpus
           // is authoritative, so the code is reconciled here.
-          code: 'unknown_target',
+          code: "unknown_target",
           message: `node "${id}" exit "${exit}" points at "${target}", which is not a node`,
           params: { exit, target },
         });
@@ -165,17 +167,17 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
 
     // Per-component config sanity.
     switch (node.kind) {
-      case 'greeting':
-      case 'message':
+      case "greeting":
+      case "message":
         checkPrompt(id, node.prompt, issues, at);
         break;
-      case 'menu': {
+      case "menu": {
         checkPrompt(id, node.prompt, issues, at);
         const digits = Object.keys(node.options);
         if (digits.length === 0) {
           issues.push({
             ...at(id),
-            code: 'empty_menu',
+            code: "empty_menu",
             message: `menu node "${id}" offers no options`,
           });
         }
@@ -183,7 +185,7 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
           if (!VALID_DIGITS.includes(digit)) {
             issues.push({
               ...at(id),
-              code: 'bad_digit',
+              code: "bad_digit",
               message: `menu node "${id}" option key "${digit}" is not a DTMF digit (0-9, *, #)`,
               params: { key: digit },
             });
@@ -191,41 +193,68 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
         }
         break;
       }
-      case 'hours':
+      case "hours":
         issues.push(
-          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map((issue) => ({
+          ...validateHours(
+            id,
+            node.schedule,
+            node.timezone,
+            node.exceptions ?? [],
+          ).map((issue) => ({
             ...issue,
             range: nodeRanges[id],
           })),
         );
         break;
-      case 'transfer':
-        if (node.target.trim() === '') {
+      case "transfer":
+        if (node.target.trim() === "") {
           issues.push({
             ...at(id),
-            code: 'empty_transfer_target',
+            code: "empty_transfer_target",
             message: `transfer node "${id}" has an empty target`,
           });
         }
         checkTransferFields(id, node, flow.schema_version, issues, at);
         break;
-      case 'hangup':
+      case "hangup":
         if (node.prompt !== undefined) checkPrompt(id, node.prompt, issues, at);
         break;
-      case 'book':
+      case "book":
         checkPrompt(id, node.prompt, issues, at);
         checkPrompt(id, node.confirm_prompt, issues, at);
         issues.push(
-          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map((issue) => ({
+          ...validateHours(
+            id,
+            node.schedule,
+            node.timezone,
+            node.exceptions ?? [],
+          ).map((issue) => ({
             ...issue,
             range: nodeRanges[id],
           })),
         );
         checkBookBounds(id, node, issues, at);
         break;
-      case 'ring':
+      case "ring":
         break;
     }
+
+    if (
+      flow.schema_version < TEMPLATE_MIN_SCHEMA_VERSION &&
+      nodePrompts(node).some((p) => promptTemplate(p) !== null)
+    ) {
+      issues.push({
+        ...at(id),
+        code: "field_requires_newer_schema",
+        message: `node "${id}" gives a prompt a template, which needs schema_version ${TEMPLATE_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
+        params: {
+          field: "template",
+          required: TEMPLATE_MIN_SCHEMA_VERSION,
+          declared: flow.schema_version,
+        },
+      });
+    }
+    checkPlaceholders(id, node, flow, issues, at, mentioned);
 
     // A component the document's own version doesn't have. Checked per
     // node rather than once per flow so the editor points at the step
@@ -236,9 +265,13 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
     if (minVersion !== undefined && flow.schema_version < minVersion) {
       issues.push({
         ...at(id),
-        code: 'kind_requires_newer_schema',
+        code: "kind_requires_newer_schema",
         message: `node "${id}" is a ${node.kind} step, which needs schema_version ${minVersion} (this document declares ${flow.schema_version})`,
-        params: { kind: node.kind, required: minVersion, declared: flow.schema_version },
+        params: {
+          kind: node.kind,
+          required: minVersion,
+          declared: flow.schema_version,
+        },
       });
     }
   }
@@ -249,8 +282,8 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
     for (const name of Object.keys(flow.variables ?? {})) {
       if (!mentioned.has(name)) {
         issues.push({
-          severity: 'warning',
-          code: 'unused_variable',
+          severity: "warning",
+          code: "unused_variable",
           message: `variable "${name}" is declared but no prompt or menu label uses it`,
           params: { name },
         });
@@ -273,7 +306,7 @@ function checkTransferFields(
   node: TransferNode,
   declared: number,
   issues: Issue[],
-  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+  at: (node: string) => Pick<Issue, "severity" | "node" | "range">,
 ): void {
   if (node.whisper !== undefined) checkPrompt(id, node.whisper, issues, at);
   const timeout = node.timeout_secs;
@@ -281,14 +314,17 @@ function checkTransferFields(
     if (node.whisper === undefined) {
       issues.push({
         ...at(id),
-        code: 'timeout_without_whisper',
+        code: "timeout_without_whisper",
         message: `transfer node "${id}" sets timeout_secs but has no whisper to screen with`,
       });
     }
-    if (timeout < MIN_TRANSFER_TIMEOUT_SECS || timeout > MAX_TRANSFER_TIMEOUT_SECS) {
+    if (
+      timeout < MIN_TRANSFER_TIMEOUT_SECS ||
+      timeout > MAX_TRANSFER_TIMEOUT_SECS
+    ) {
       issues.push({
         ...at(id),
-        code: 'transfer_timeout_out_of_range',
+        code: "transfer_timeout_out_of_range",
         message: `transfer node "${id}" timeout_secs is ${timeout} (allowed: ${MIN_TRANSFER_TIMEOUT_SECS}–${MAX_TRANSFER_TIMEOUT_SECS})`,
         params: {
           value: timeout,
@@ -299,13 +335,17 @@ function checkTransferFields(
     }
   }
   if (declared < TRANSFER_FIELDS_MIN_SCHEMA_VERSION) {
-    for (const field of ['whisper', 'timeout_secs'] as const) {
+    for (const field of ["whisper", "timeout_secs"] as const) {
       if (node[field] === undefined) continue;
       issues.push({
         ...at(id),
-        code: 'field_requires_newer_schema',
+        code: "field_requires_newer_schema",
         message: `transfer node "${id}" sets ${field}, which needs schema_version ${TRANSFER_FIELDS_MIN_SCHEMA_VERSION} (this document declares ${declared})`,
-        params: { field, required: TRANSFER_FIELDS_MIN_SCHEMA_VERSION, declared },
+        params: {
+          field,
+          required: TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
+          declared,
+        },
       });
     }
   }
@@ -325,32 +365,62 @@ function checkBookBounds(
   id: string,
   node: BookNode,
   issues: Issue[],
-  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+  at: (node: string) => Pick<Issue, "severity" | "node" | "range">,
 ): void {
-  const range = (field: string, value: number, min: number, max: number): void => {
+  const range = (
+    field: string,
+    value: number,
+    min: number,
+    max: number,
+  ): void => {
     if (value < min || value > max) {
       issues.push({
         ...at(id),
-        code: 'book_out_of_range',
+        code: "book_out_of_range",
         message: `book node "${id}" ${field} is ${value} (allowed: ${min}–${max})`,
         params: { field, value, min, max },
       });
     }
   };
 
-  range('duration_mins', node.duration_mins, MIN_BOOK_DURATION_MINS, MAX_BOOK_DURATION_MINS);
-  range('buffer_mins', node.buffer_mins ?? DEFAULT_BOOK_BUFFER_MINS, 0, MAX_BOOK_BUFFER_MINS);
-  range('lead_mins', node.lead_mins ?? DEFAULT_BOOK_LEAD_MINS, 0, MAX_BOOK_LEAD_MINS);
-  range('horizon_days', node.horizon_days ?? DEFAULT_BOOK_HORIZON_DAYS, 1, MAX_BOOK_HORIZON_DAYS);
-  range('max_offers', node.max_offers ?? DEFAULT_BOOK_MAX_OFFERS, 1, MAX_BOOK_OFFERS);
+  range(
+    "duration_mins",
+    node.duration_mins,
+    MIN_BOOK_DURATION_MINS,
+    MAX_BOOK_DURATION_MINS,
+  );
+  range(
+    "buffer_mins",
+    node.buffer_mins ?? DEFAULT_BOOK_BUFFER_MINS,
+    0,
+    MAX_BOOK_BUFFER_MINS,
+  );
+  range(
+    "lead_mins",
+    node.lead_mins ?? DEFAULT_BOOK_LEAD_MINS,
+    0,
+    MAX_BOOK_LEAD_MINS,
+  );
+  range(
+    "horizon_days",
+    node.horizon_days ?? DEFAULT_BOOK_HORIZON_DAYS,
+    1,
+    MAX_BOOK_HORIZON_DAYS,
+  );
+  range(
+    "max_offers",
+    node.max_offers ?? DEFAULT_BOOK_MAX_OFFERS,
+    1,
+    MAX_BOOK_OFFERS,
+  );
 
   const speaksATime = bookVocabularyRefs(node).some(
-    (ref) => parseBookVocabularyRef(ref)?.kind === 'time',
+    (ref) => parseBookVocabularyRef(ref)?.kind === "time",
   );
   if (!speaksATime) {
     issues.push({
       ...at(id),
-      code: 'book_never_open',
+      code: "book_never_open",
       message: `book node "${id}" can never offer an appointment: no opening leaves room for ${node.duration_mins} minutes`,
       params: { duration: node.duration_mins },
     });
@@ -365,27 +435,32 @@ function checkVariables(flow: Flow, issues: Issue[]): void {
   for (const name of Object.keys(flow.variables ?? {}).sort()) {
     if (!isVariableName(name)) {
       issues.push({
-        severity: 'error',
-        code: 'variable_bad_name',
+        severity: "error",
+        code: "variable_bad_name",
         message: `variable name "${name}" must be a lowercase letter, then up to 31 lowercase letters, digits or underscores`,
         params: { name },
       });
     }
     const maxLen = flow.variables?.[name]?.max_len;
-    if (maxLen !== undefined && (!Number.isInteger(maxLen) || maxLen < 1 || maxLen > MAX_VARIABLE_LEN)) {
+    if (
+      maxLen !== undefined &&
+      (!Number.isInteger(maxLen) || maxLen < 1 || maxLen > MAX_VARIABLE_LEN)
+    ) {
       issues.push({
-        severity: 'error',
-        code: 'variable_max_len_out_of_range',
+        severity: "error",
+        code: "variable_max_len_out_of_range",
         message: `variable "${name}" max_len is ${maxLen} (allowed: 1-${MAX_VARIABLE_LEN})`,
         params: { name, value: maxLen },
       });
     }
   }
-  const fields = (['id', 'name'] as const).filter((k) => flow[k].includes('{{')).sort();
+  const fields = (["id", "name"] as const)
+    .filter((k) => flow[k].includes("{{"))
+    .sort();
   if (fields.length > 0) {
     issues.push({
-      severity: 'error',
-      code: 'placeholder_not_allowed',
+      severity: "error",
+      code: "placeholder_not_allowed",
       message: `${JSON.stringify(fields)} holds a {{ placeholder, which is only allowed in a prompt, a prompt template or a menu label`,
       params: { fields },
     });
@@ -401,7 +476,7 @@ function checkPlaceholders(
   node: Node,
   flow: Flow,
   issues: Issue[],
-  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+  at: (node: string) => Pick<Issue, "severity" | "node" | "range">,
   mentioned: Set<string>,
 ): void {
   if (flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) return;
@@ -413,48 +488,49 @@ function checkPlaceholders(
         if (!Object.hasOwn(flow.variables ?? {}, name)) {
           issues.push({
             ...at(id),
-            code: 'unknown_variable',
+            code: "unknown_variable",
             message: `node "${id}" ${field} uses "${name}", which the flow does not declare under variables`,
             params: { field, name },
           });
         }
       }
-    } else if (error.kind === 'bad_name') {
+    } else if (error.kind === "bad_name") {
       issues.push({
         ...at(id),
-        code: 'variable_bad_name',
+        code: "variable_bad_name",
         message: `variable name "${error.name}" must be a lowercase letter, then up to 31 lowercase letters, digits or underscores`,
         params: { name: error.name },
       });
     } else {
       issues.push({
         ...at(id),
-        code: 'template_syntax',
+        code: "template_syntax",
         message: `node "${id}" ${field} has a malformed placeholder: ${TEMPLATE_REASONS[error.kind]}`,
         params: { field, reason: TEMPLATE_REASONS[error.kind] },
       });
     }
   };
   for (const [field, prompt] of nodePromptSlots(node)) {
-    if (typeof prompt === 'string') scan(field, prompt);
-    else if (typeof prompt.template === 'string') scan(`${field}.template`, prompt.template);
+    if (typeof prompt === "string") scan(field, prompt);
+    else if (typeof prompt.template === "string")
+      scan(`${field}.template`, prompt.template);
   }
-  if (node.kind === 'menu') {
+  if (node.kind === "menu") {
     for (const key of Object.keys(node.options).sort()) {
-      scan(`options.${key}`, node.options[key] ?? '');
+      scan(`options.${key}`, node.options[key] ?? "");
     }
   }
 
   // Everything else: any string value holding `{{` is out of place.
   const bad: string[] = [];
   for (const [key, value] of Object.entries(node)) {
-    if (key !== 'exits' && key !== 'kind') collectStrayBraces(key, value, bad);
+    if (key !== "exits" && key !== "kind") collectStrayBraces(key, value, bad);
   }
   bad.sort();
   if (bad.length > 0) {
     issues.push({
       ...at(id),
-      code: 'placeholder_not_allowed',
+      code: "placeholder_not_allowed",
       message: `node "${id}" ${JSON.stringify(bad)} holds a {{ placeholder, which is only allowed in a prompt, a prompt template or a menu label`,
       params: { fields: bad },
     });
@@ -462,27 +538,27 @@ function checkPlaceholders(
 }
 
 const TEMPLATE_REASONS = {
-  unclosed: 'a `{{` or block is never closed',
-  nested: 'blocks cannot be nested',
-  mismatched: 'a block close does not match an open block',
+  unclosed: "a `{{` or block is never closed",
+  nested: "blocks cannot be nested",
+  mismatched: "a block close does not match an open block",
 } as const;
 
 /** The prompt slots of a node with the field each comes from. */
 function nodePromptSlots(node: Node): [string, Prompt][] {
   switch (node.kind) {
-    case 'greeting':
-    case 'menu':
-    case 'message':
-      return [['prompt', node.prompt]];
-    case 'hangup':
-      return node.prompt === undefined ? [] : [['prompt', node.prompt]];
-    case 'book':
+    case "greeting":
+    case "menu":
+    case "message":
+      return [["prompt", node.prompt]];
+    case "hangup":
+      return node.prompt === undefined ? [] : [["prompt", node.prompt]];
+    case "book":
       return [
-        ['prompt', node.prompt],
-        ['confirm_prompt', node.confirm_prompt],
+        ["prompt", node.prompt],
+        ["confirm_prompt", node.confirm_prompt],
       ];
-    case 'transfer':
-      return node.whisper === undefined ? [] : [['whisper', node.whisper]];
+    case "transfer":
+      return node.whisper === undefined ? [] : [["whisper", node.whisper]];
     default:
       return [];
   }
@@ -492,18 +568,19 @@ function nodePromptSlots(node: Node): [string, Prompt][] {
  * where a placeholder is allowed: a plain-string `prompt`, `confirm_prompt`
  * or `whisper`, any `.template`, and menu `options`. */
 function collectStrayBraces(path: string, value: unknown, out: string[]): void {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const allowed =
-      path === 'prompt' ||
-      path === 'confirm_prompt' ||
-      path === 'whisper' ||
-      path.endsWith('.template') ||
-      path.startsWith('options.');
-    if (value.includes('{{') && !allowed) out.push(path);
+      path === "prompt" ||
+      path === "confirm_prompt" ||
+      path === "whisper" ||
+      path.endsWith(".template") ||
+      path.startsWith("options.");
+    if (value.includes("{{") && !allowed) out.push(path);
   } else if (Array.isArray(value)) {
     value.forEach((item, i) => collectStrayBraces(`${path}.${i}`, item, out));
-  } else if (value !== null && typeof value === 'object') {
-    for (const [key, item] of Object.entries(value)) collectStrayBraces(`${path}.${key}`, item, out);
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, item] of Object.entries(value))
+      collectStrayBraces(`${path}.${key}`, item, out);
   }
 }
 
@@ -511,7 +588,7 @@ function checkPrompt(
   id: string,
   prompt: Prompt,
   issues: Issue[],
-  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+  at: (node: string) => Pick<Issue, "severity" | "node" | "range">,
 ): void {
   const text = promptText(prompt);
   if (text !== null) {
@@ -519,7 +596,7 @@ function checkPrompt(
     if (len > MAX_PROMPT_CHARS) {
       issues.push({
         ...at(id),
-        code: 'prompt_too_long',
+        code: "prompt_too_long",
         message: `node "${id}" prompt is ${len} chars (max ${MAX_PROMPT_CHARS})`,
         params: { len, max: MAX_PROMPT_CHARS },
       });
@@ -531,7 +608,7 @@ function checkPrompt(
 function checkGraph(
   flow: Flow,
   issues: Issue[],
-  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+  at: (node: string) => Pick<Issue, "severity" | "node" | "range">,
 ): void {
   const reachable = reachableFromEntry(flow);
 
@@ -539,7 +616,7 @@ function checkGraph(
     if (!reachable.has(id)) {
       issues.push({
         ...at(id),
-        code: 'unreachable',
+        code: "unreachable",
         message: `node "${id}" is unreachable from entry`,
       });
     }
@@ -557,7 +634,9 @@ function checkGraph(
     grew = false;
     for (const [id, node] of Object.entries(flow.nodes)) {
       if (canEnd.has(id)) continue;
-      if (Object.values(node.exits ?? {}).some((target) => canEnd.has(target))) {
+      if (
+        Object.values(node.exits ?? {}).some((target) => canEnd.has(target))
+      ) {
         canEnd.add(id);
         grew = true;
       }
@@ -571,7 +650,7 @@ function checkGraph(
     if (!canEnd.has(id)) {
       issues.push({
         ...at(id),
-        code: 'trapped',
+        code: "trapped",
         message: `node "${id}" can never reach a way to end the call (caller trapped)`,
       });
     }
@@ -614,14 +693,18 @@ function reachableFromEntry(flow: Flow): Set<string> {
  * version 3).
  */
 export const OUTBOUND_KINDS: readonly ComponentKind[] = [
-  'greeting',
-  'menu',
-  'message',
-  'hangup',
-  'hours',
+  "greeting",
+  "menu",
+  "message",
+  "hangup",
+  "hours",
 ];
 
-const OUTBOUND_KINDS_V3: readonly ComponentKind[] = [...OUTBOUND_KINDS, 'ring', 'transfer'];
+const OUTBOUND_KINDS_V3: readonly ComponentKind[] = [
+  ...OUTBOUND_KINDS,
+  "ring",
+  "transfer",
+];
 
 /**
  * The kinds a flow declaring `schemaVersion` may use on an outbound call.
@@ -657,10 +740,13 @@ export function outboundKinds(schemaVersion: number): readonly ComponentKind[] {
  *
  * Twin: `validate.rs` `validate_outbound`.
  */
-export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
+export function validateOutbound(
+  flow: Flow,
+  nodeRanges: NodeRanges = {},
+): Issue[] {
   const issues = validateFlow(flow, nodeRanges);
-  const at = (node: string): Pick<Issue, 'severity' | 'node' | 'range'> => ({
-    severity: 'error',
+  const at = (node: string): Pick<Issue, "severity" | "node" | "range"> => ({
+    severity: "error",
     node,
     range: nodeRanges[node],
   });
@@ -672,14 +758,14 @@ export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue
     if (!allowed.includes(node.kind as ComponentKind)) {
       issues.push({
         ...at(id),
-        code: 'outbound_node_not_allowed',
+        code: "outbound_node_not_allowed",
         message: `node "${id}" is a ${node.kind} step, which an outbound call cannot run`,
         params: { kind: node.kind },
       });
-    } else if (node.kind === 'transfer' && !isScreenedTransfer(node)) {
+    } else if (node.kind === "transfer" && !isScreenedTransfer(node)) {
       issues.push({
         ...at(id),
-        code: 'outbound_blind_transfer',
+        code: "outbound_blind_transfer",
         message: `transfer node "${id}" has no whisper: an outbound call must screen the person it hands the callee to`,
       });
     }
@@ -688,7 +774,7 @@ export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue
   for (const id of unboundedLoopNodes(flow)) {
     issues.push({
       ...at(id),
-      code: 'outbound_unbounded_loop',
+      code: "outbound_unbounded_loop",
       message: `node "${id}" is on a loop that never waits for the callee, so an outbound call could repeat it forever`,
     });
   }
@@ -700,18 +786,20 @@ export function validateOutbound(flow: Flow, nodeRanges: NodeRanges = {}): Issue
  * a `greeting` (always `next`), `hours` (picked by the clock), `ring` or
  * screened `transfer` step (`no_answer`: nobody picked up), and a
  * `menu`'s `no_input` (taken when nobody presses a key — voicemail, say). */
-function silentExits(node: Flow['nodes'][string] | undefined): string[] {
+function silentExits(node: Flow["nodes"][string] | undefined): string[] {
   if (!node) return [];
   const exits = Object.entries(node.exits ?? {});
   switch (node.kind) {
-    case 'greeting':
-    case 'hours':
-    case 'ring':
+    case "greeting":
+    case "hours":
+    case "ring":
       return exits.map(([, target]) => target);
-    case 'transfer':
+    case "transfer":
       return isScreenedTransfer(node) ? exits.map(([, target]) => target) : [];
-    case 'menu':
-      return exits.filter(([key]) => key === 'no_input').map(([, target]) => target);
+    case "menu":
+      return exits
+        .filter(([key]) => key === "no_input")
+        .map(([, target]) => target);
     default:
       return [];
   }
