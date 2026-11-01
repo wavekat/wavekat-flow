@@ -27,6 +27,7 @@ import {
   VALID_DIGITS,
   isScreenedTransfer,
   isTerminal,
+  nodePromptSlots,
   nodePrompts,
   promptTemplate,
   promptText,
@@ -486,27 +487,6 @@ const TEMPLATE_REASONS = {
   nested: 'blocks cannot be nested',
   mismatched: 'a block close does not match an open block',
 } as const;
-
-/** The prompt slots of a node with the field each comes from. */
-function nodePromptSlots(node: Node): [string, Prompt][] {
-  switch (node.kind) {
-    case 'greeting':
-    case 'menu':
-    case 'message':
-      return [['prompt', node.prompt]];
-    case 'hangup':
-      return node.prompt === undefined ? [] : [['prompt', node.prompt]];
-    case 'book':
-      return [
-        ['prompt', node.prompt],
-        ['confirm_prompt', node.confirm_prompt],
-      ];
-    case 'transfer':
-      return node.whisper === undefined ? [] : [['whisper', node.whisper]];
-    default:
-      return [];
-  }
-}
 
 /** Paths of string values under `value` that hold `{{`, apart from the slots
  * where a placeholder is allowed: a plain-string `prompt`, `confirm_prompt`

@@ -5,6 +5,9 @@
 // conditional blocks (kept only when the variable's value is non-empty).
 // Blocks do not nest and have no else. Names are `[a-z][a-z0-9_]{0,31}`.
 
+import type { Flow } from './model.js';
+import { nodePromptSlots } from './model.js';
+
 /** One piece of a parsed template. A block's body holds only text and vars. */
 export type Segment =
   | { kind: 'text'; text: string }
@@ -102,4 +105,101 @@ export function templateNames(s: string): string[] {
     }
   }
   return names;
+}
+
+/** Why `fill` refused a value. */
+export type FillError = { code: 'variable_unknown' | 'variable_too_long'; name: string };
+
+const DEFAULT_MAX_LEN = 200;
+
+/** A caller's value, trimmed with control characters stripped. Twin: `clean`. */
+function clean(value: string): string {
+  return value.replace(/\p{Cc}/gu, '').trim();
+}
+
+function render(segments: Segment[], effective: (name: string) => string): string {
+  let out = '';
+  for (const seg of segments) {
+    if (seg.kind === 'text') out += seg.text;
+    else if (seg.kind === 'var') out += effective(seg.name);
+    else if (effective(seg.name) !== '') out += render(seg.body, effective);
+  }
+  return out;
+}
+
+/**
+ * Turn a flow with variables plus a caller's values into a plain flow the
+ * engine can run: every placeholder replaced, `variables` gone,
+ * `schema_version` unchanged. The input is not modified. Twin: `vars.rs` `fill`.
+ *
+ * A name's effective value is the caller's (trimmed, control characters
+ * stripped) when that is non-empty, else the variable's default. Values are
+ * inserted as text and never parsed again. A menu option whose label is
+ * exactly `{{name}}` with an empty value is removed, with its exit. An audio
+ * prompt with a `template` stays audio (dropping the template) unless a
+ * variable it names got a non-default value; then it becomes the filled text.
+ * A flow without variables comes back as a clone. A malformed template is
+ * left as written (validation rejects those before fill is reached).
+ */
+export function fill(
+  flow: Flow,
+  values: Record<string, string>,
+): { flow: Flow } | { errors: FillError[] } {
+  const declared = flow.variables ?? {};
+  const out = structuredClone(flow);
+  if (Object.keys(declared).length === 0 && Object.keys(values).length === 0) return { flow: out };
+
+  const errors: FillError[] = [];
+  const given = new Map<string, string>();
+  for (const name of Object.keys(values).sort()) {
+    const variable = Object.hasOwn(declared, name) ? declared[name] : undefined;
+    if (variable === undefined) {
+      errors.push({ code: 'variable_unknown', name });
+      continue;
+    }
+    const value = clean(values[name] ?? '');
+    if ([...value].length > (variable.max_len ?? DEFAULT_MAX_LEN)) {
+      errors.push({ code: 'variable_too_long', name });
+    } else if (value !== '') {
+      given.set(name, value);
+    }
+  }
+  if (errors.length > 0) return { errors };
+
+  const defaultOf = (name: string): string =>
+    Object.hasOwn(declared, name) ? (declared[name]?.default ?? '') : '';
+  const effective = (name: string): string => given.get(name) ?? defaultOf(name);
+  const fillText = (text: string): string => {
+    const { segments, error } = tryParseTemplate(text);
+    return error === null ? render(segments, effective) : text;
+  };
+
+  delete out.variables;
+  for (const node of Object.values(out.nodes)) {
+    for (const [field, prompt] of nodePromptSlots(node)) {
+      let next: typeof prompt = prompt;
+      if (typeof prompt === 'string') {
+        next = fillText(prompt);
+      } else if (typeof prompt.template === 'string') {
+        const { template, ...clip } = prompt;
+        const overridden = templateNames(template).some(
+          (n) => given.has(n) && given.get(n) !== defaultOf(n),
+        );
+        next = overridden ? fillText(template) : clip;
+      }
+      (node as unknown as Record<string, unknown>)[field] = next;
+    }
+    if (node.kind === 'menu') {
+      for (const [key, label] of Object.entries(node.options)) {
+        const bare = /^\{\{([^{}]*)\}\}$/.exec(label)?.[1];
+        if (bare !== undefined && isVariableName(bare) && effective(bare) === '') {
+          delete node.options[key];
+          if (node.exits) delete node.exits[key];
+        } else {
+          node.options[key] = fillText(label);
+        }
+      }
+    }
+  }
+  return { flow: out };
 }

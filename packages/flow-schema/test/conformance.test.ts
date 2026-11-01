@@ -18,7 +18,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import { checkFlow, hasErrors, parseFlow, requiredAssets, validateOutbound } from '../src/index.js';
+import {
+  checkFlow,
+  fill,
+  hasErrors,
+  parseFlow,
+  requiredAssets,
+  serializeFlow,
+  validateOutbound,
+} from '../src/index.js';
 import { validateStructure } from '../src/structure.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -185,6 +193,47 @@ describe('conformance corpus — outbound (validateOutbound)', () => {
       const reported = new Set(issues.map((issue) => issue.code));
       for (const code of expected.semantic.errors) {
         expect(reported, `expected outbound error "${code}" for ${bucket}/${name}`).toContain(code);
+      }
+    });
+  }
+});
+
+// The fill corpus: `conformance/fill/<case>.input.yaml` + `<case>.values.json`
+// run through `fill`. A success case has `<case>.expected.yaml`, compared with
+// the filled flow after canonical serialization; a refusal has
+// `<case>.expected.json` = `{"errors": [codes]}` (exact list, in order). The
+// Rust crate runs the same cases (`corpus_fill_matches_expectations`).
+const FILL_DIR = resolve(corpusRoot, 'fill');
+const FILL_CASES = readdirSync(FILL_DIR)
+  .filter((f) => f.endsWith('.input.yaml'))
+  .map((f) => f.slice(0, -'.input.yaml'.length))
+  .sort();
+
+function decode(src: string, label: string) {
+  const { flow, issues } = parseFlow(src);
+  if (!flow) throw new Error(`${label}: ${JSON.stringify(issues)}`);
+  return flow;
+}
+
+describe('conformance corpus — fill', () => {
+  it('has cases', () => {
+    expect(FILL_CASES.length).toBeGreaterThan(0);
+  });
+
+  for (const name of FILL_CASES) {
+    it(name, () => {
+      const read = (ext: string) => readFileSync(resolve(FILL_DIR, `${name}.${ext}`), 'utf8');
+      const flow = decode(read('input.yaml'), name);
+      const values = JSON.parse(read('values.json')) as Record<string, string>;
+      const result = fill(flow, values);
+      if (existsSync(resolve(FILL_DIR, `${name}.expected.yaml`))) {
+        if (!('flow' in result)) throw new Error(JSON.stringify(result.errors));
+        const want = decode(read('expected.yaml'), name);
+        expect(serializeFlow(result.flow)).toBe(serializeFlow(want));
+      } else {
+        const want = JSON.parse(read('expected.json')) as { errors: string[] };
+        if (!('errors' in result)) throw new Error('expected fill to be refused');
+        expect(result.errors.map((e) => e.code)).toEqual(want.errors);
       }
     });
   }

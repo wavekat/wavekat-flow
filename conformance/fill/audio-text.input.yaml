@@ -1,0 +1,10 @@
+schema_version: 4
+id: flow_audio
+name: Audio template
+entry: hi
+variables:
+  name: { default: there }
+nodes:
+  hi:
+    kind: hangup
+    prompt: { audio: vprompt_a, template: "Hi {{name}}" }

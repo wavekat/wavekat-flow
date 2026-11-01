@@ -337,6 +337,27 @@ export function nodePrompts(node: Node): Prompt[] {
   }
 }
 
+/** The prompt slots of a node with the field each comes from. */
+export function nodePromptSlots(node: Node): [string, Prompt][] {
+  switch (node.kind) {
+    case 'greeting':
+    case 'menu':
+    case 'message':
+      return [['prompt', node.prompt]];
+    case 'hangup':
+      return node.prompt === undefined ? [] : [['prompt', node.prompt]];
+    case 'book':
+      return [
+        ['prompt', node.prompt],
+        ['confirm_prompt', node.confirm_prompt],
+      ];
+    case 'transfer':
+      return node.whisper === undefined ? [] : [['whisper', node.whisper]];
+    default:
+      return [];
+  }
+}
+
 /**
  * Every audio asset the flow needs on the device, sorted and unique:
  * the refs its prompts point at, plus — for a `book` node — the

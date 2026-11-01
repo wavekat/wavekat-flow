@@ -285,3 +285,47 @@ fn outbound_corpus_matches_expectations() {
     }
     assert!(ran > 0, "the outbound corpus has no cases");
 }
+
+// The fill corpus: `conformance/fill/<case>.input.yaml` + `<case>.values.json`
+// run through `fill`. A success case has `<case>.expected.yaml`, compared with
+// the filled flow after canonical serialization; a refusal has
+// `<case>.expected.json` = `{"errors": [codes]}` (exact list, in order).
+#[test]
+fn corpus_fill_matches_expectations() {
+    let dir = corpus_root().join("fill");
+    let mut ran = 0;
+    for (stem, path) in yaml_cases_in(&dir) {
+        let Some(case) = stem.strip_suffix(".input") else {
+            continue;
+        };
+        let flow = Flow::from_yaml(&fs::read_to_string(&path).unwrap()).unwrap();
+        let values: std::collections::BTreeMap<String, String> = serde_json::from_str(
+            &fs::read_to_string(dir.join(format!("{case}.values.json"))).unwrap(),
+        )
+        .unwrap();
+        let result = wavekat_flow::vars::fill(&flow, &values);
+        let expected_yaml = dir.join(format!("{case}.expected.yaml"));
+        if expected_yaml.exists() {
+            let filled = result.unwrap_or_else(|e| panic!("fill/{case} should succeed: {e:?}"));
+            let want = Flow::from_yaml(&fs::read_to_string(expected_yaml).unwrap()).unwrap();
+            assert_eq!(filled.to_yaml(), want.to_yaml(), "fill/{case}");
+        } else {
+            #[derive(serde::Deserialize)]
+            struct Refusal {
+                errors: Vec<String>,
+            }
+            let want: Refusal = serde_json::from_str(
+                &fs::read_to_string(dir.join(format!("{case}.expected.json"))).unwrap(),
+            )
+            .unwrap();
+            let got: Vec<String> = result
+                .expect_err(&format!("fill/{case} should be refused"))
+                .iter()
+                .map(|e| e.code().to_string())
+                .collect();
+            assert_eq!(got, want.errors, "fill/{case}");
+        }
+        ran += 1;
+    }
+    assert!(ran > 0, "the fill corpus has no cases");
+}

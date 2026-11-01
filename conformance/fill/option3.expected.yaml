@@ -1,0 +1,18 @@
+schema_version: 4
+id: flow_ask_question
+name: Ask a question
+entry: ask
+nodes:
+  ask:
+    kind: menu
+    prompt: "Claude has a question. Claude needs your input on screen. Press 1 for Yes. Press 2 for No. Press 3 for Both. Press 9 to hear this again."
+    options: { "1": "Yes", "2": "No", "3": Both, "9": Repeat }
+    retries: 2
+    timeout_secs: 8
+    exits: { "1": thanks, "2": thanks, "3": thanks, "9": ask, no_input: bye, invalid: bye }
+  thanks:
+    kind: hangup
+    prompt: Got it, thanks. Goodbye.
+  bye:
+    kind: hangup
+    prompt: No answer recorded. The question will wait on screen. Goodbye.

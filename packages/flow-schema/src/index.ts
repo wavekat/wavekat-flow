@@ -66,6 +66,7 @@ export {
 } from './mutate.js';
 
 export {
+  fill,
   isVariableName,
   parseTemplate,
   templateErrorCode,
@@ -73,4 +74,4 @@ export {
   templateNames,
   tryParseTemplate,
 } from './vars.js';
-export type { Segment, TemplateError } from './vars.js';
+export type { FillError, Segment, TemplateError } from './vars.js';
