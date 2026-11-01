@@ -138,6 +138,11 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
   book: 2,
 };
 
+/** An empty `variables` map declares nothing, so it is the same as none. */
+export function hasVariables(flow: Flow): boolean {
+  return flow.variables !== undefined && Object.keys(flow.variables).length > 0;
+}
+
 /**
  * The lowest `schema_version` that can carry this document's components —
  * the version it *needs*, as against the one it declares.
@@ -157,7 +162,7 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
 export function requiredSchemaVersion(flow: Flow): number {
   return Math.max(
     1,
-    flow.variables !== undefined ? VARIABLES_MIN_SCHEMA_VERSION : 1,
+    hasVariables(flow) ? VARIABLES_MIN_SCHEMA_VERSION : 1,
     ...Object.values(flow.nodes).map((node) =>
       Math.max(
         KIND_MIN_SCHEMA_VERSION[node.kind],

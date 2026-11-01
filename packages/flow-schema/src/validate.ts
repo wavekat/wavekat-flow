@@ -21,6 +21,7 @@ import {
   SUPPORTED_SCHEMA_VERSIONS,
   TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
   VARIABLES_MIN_SCHEMA_VERSION,
+  hasVariables,
   VALID_DIGITS,
   isScreenedTransfer,
   isTerminal,
@@ -70,7 +71,7 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
 
   // Flow-level, so it carries no node. Same code as a transfer field on an
   // older document: the field needs a newer version than the one declared.
-  if (flow.variables !== undefined && flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) {
+  if (hasVariables(flow) && flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) {
     issues.push({
       severity: 'error',
       code: 'field_requires_newer_schema',

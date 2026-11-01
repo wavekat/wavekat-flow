@@ -414,3 +414,40 @@ describe('known fields follow the schema', () => {
     }
   });
 });
+
+describe('parseFlow variables', () => {
+  const doc = (variables: string) =>
+    `schema_version: 4\nid: f\nname: F\nentry: a\nvariables:${variables}\nnodes:\n  a:\n    kind: hangup\n`;
+  const codes = (source: string) =>
+    parseFlow(source)
+      .issues.filter((i) => i.severity === 'error')
+      .map((i) => i.code);
+
+  it('decodes every field of a variable', () => {
+    const { flow, issues } = parseFlow(
+      doc('\n  q: { description: Ask, required: true, default: hi, max_len: 30 }'),
+    );
+    expect(issues).toEqual([]);
+    expect(flow?.variables).toEqual({
+      q: { description: 'Ask', required: true, default: 'hi', max_len: 30 },
+    });
+  });
+
+  it('refuses variables that is not a mapping', () => {
+    const r = parseFlow(doc(' [a, b]'));
+    expect(r.flow).toBeNull();
+    expect(codes(doc(' [a, b]'))).toEqual(['expected_map']);
+  });
+
+  it('refuses an entry that is not a mapping', () => {
+    expect(codes(doc('\n  q: nope'))).toEqual(['expected_map']);
+  });
+
+  it('refuses a required that is not a boolean', () => {
+    expect(codes(doc('\n  q: { required: "yes" }'))).toEqual(['expected_boolean']);
+  });
+
+  it('refuses a max_len that is not an integer', () => {
+    expect(codes(doc('\n  q: { max_len: lots }'))).toEqual(['expected_integer']);
+  });
+});

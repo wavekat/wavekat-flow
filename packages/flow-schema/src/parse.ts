@@ -751,7 +751,9 @@ export function parseFlow(source: string): ParseResult {
       name,
       version,
       ...(note === undefined ? {} : { note }),
-      ...(variables === undefined ? {} : { variables }),
+      // An empty map declares nothing; drop it so it round-trips (the Rust
+      // twin skips an empty map when writing).
+      ...(variables === undefined || Object.keys(variables).length === 0 ? {} : { variables }),
       entry,
       nodes,
       ui: ui as Flow['ui'],

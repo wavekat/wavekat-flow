@@ -47,6 +47,16 @@ nodes:
 `;
 
 describe('requiredSchemaVersion', () => {
+  it('is 4 once the document declares variables, and 1 when the map is empty', () => {
+    const flow = parsed(V1_ONLY);
+    flow.variables = { q: { required: true } };
+    expect(requiredSchemaVersion(flow)).toBe(4);
+    flow.variables = {};
+    expect(requiredSchemaVersion(flow)).toBe(1);
+    delete flow.variables;
+    expect(requiredSchemaVersion(flow)).toBe(1);
+  });
+
   it('is 1 for a document built only from components v1 had', () => {
     expect(requiredSchemaVersion(parsed(V1_ONLY))).toBe(1);
   });

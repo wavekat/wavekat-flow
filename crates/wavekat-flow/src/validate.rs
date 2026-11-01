@@ -133,8 +133,12 @@ pub enum ValidationError {
         declared: i64,
     },
 
-    #[error("variables needs schema_version {required} (this document declares {declared})")]
-    VariablesRequireNewerSchema { required: u32, declared: i64 },
+    #[error("{field} needs schema_version {required} (this document declares {declared})")]
+    VariablesRequireNewerSchema {
+        field: &'static str,
+        required: u32,
+        declared: i64,
+    },
 
     #[error("transfer node {node:?} sets timeout_secs but has no whisper to screen with")]
     TimeoutWithoutWhisper { node: NodeId },
@@ -262,6 +266,7 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
 
     if !flow.variables.is_empty() && flow.schema_version < i64::from(VARIABLES_MIN_SCHEMA_VERSION) {
         errs.push(ValidationError::VariablesRequireNewerSchema {
+            field: "variables",
             required: VARIABLES_MIN_SCHEMA_VERSION,
             declared: flow.schema_version,
         });
@@ -1543,5 +1548,40 @@ nodes:
             .replace("  bye:\n    kind: hangup\n", "");
         assert_eq!(validate(&parse(&src)), Ok(()));
         assert_eq!(validate_outbound(&parse(&src)), Ok(()));
+    }
+    // ── flow variables ───────────────────────────────────────────────────
+    const WITH_VARIABLES: &str = "schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  q: { required: true }\nnodes:\n  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n";
+
+    #[test]
+    fn variables_need_v4() {
+        let flow = parse(WITH_VARIABLES);
+        assert_eq!(required_schema_version(&flow), 4);
+        assert_eq!(validate(&flow), Ok(()));
+    }
+
+    #[test]
+    fn variables_in_v3_are_refused() {
+        let src = WITH_VARIABLES.replace("schema_version: 4", "schema_version: 3");
+        let errs = validate(&parse(&src)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![ValidationError::VariablesRequireNewerSchema {
+                field: "variables",
+                required: 4,
+                declared: 3,
+            }]
+        );
+        assert_eq!(errs[0].code(), "field_requires_newer_schema");
+    }
+
+    #[test]
+    fn empty_variables_are_no_variables() {
+        let src = WITH_VARIABLES
+            .replace("schema_version: 4", "schema_version: 3")
+            .replace("  q: { required: true }\n", "")
+            .replace("variables:\n", "variables: {}\n");
+        let flow = parse(&src);
+        assert_eq!(required_schema_version(&flow), 1);
+        assert_eq!(validate(&flow), Ok(()));
     }
 }
