@@ -278,12 +278,52 @@ describe('fill', () => {
     expect('flow' in fill(flow, { question: '😀'.repeat(300) })).toBe(true);
   });
 
-  it('filled_flow_passes_validate_outbound', () => {
-    const cases: Record<string, string>[] = [{}, { option3: 'Both', option4: 'Neither' }];
-    for (const values of cases) {
-      const issues = validateOutbound(filled(ask(), values));
-      expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
-    }
+  it('source validates and fill keeps hostile values literal', () => {
+    const issues = validateOutbound(ask());
+    expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
+    const menu = askMenu(filled(ask(), { question: '{{option1}} {x}' }));
+    expect(menu.prompt as string).toContain('{{option1}} {x}');
+  });
+
+  it('dropping_every_option_is_an_error', () => {
+    const flow = load(
+      [
+        'schema_version: 4',
+        'id: f',
+        'name: F',
+        'entry: m',
+        'variables:',
+        '  a: { default: "" }',
+        'nodes:',
+        '  m:',
+        '    kind: menu',
+        '    prompt: Pick',
+        '    options: { "1": "{{a}}" }',
+        '    exits: { "1": m, no_input: m, invalid: m }',
+        '',
+      ].join('\n'),
+    );
+    expect(fill(flow, {})).toEqual({ errors: [{ code: 'menu_without_options', name: 'm' }] });
+    expect('flow' in fill(flow, { a: 'Yes' })).toBe(true);
+  });
+
+  it('leaves a malformed template as written', () => {
+    const flow = load(
+      [
+        'schema_version: 4',
+        'id: f',
+        'name: F',
+        'entry: a',
+        'variables:',
+        '  b: { default: x }',
+        'nodes:',
+        '  a:',
+        '    kind: hangup',
+        '    prompt: "Hi {{b"',
+        '',
+      ].join('\n'),
+    );
+    expect(filled(flow, { b: 'y' }).nodes.a).toMatchObject({ prompt: 'Hi {{b' });
   });
 
   it('does not touch the input and returns a flow without variables unchanged', () => {

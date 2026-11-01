@@ -108,13 +108,19 @@ export function templateNames(s: string): string[] {
 }
 
 /** Why `fill` refused a value. */
-export type FillError = { code: 'variable_unknown' | 'variable_too_long'; name: string };
+export type FillError = {
+  code: 'variable_unknown' | 'variable_too_long' | 'menu_without_options';
+  /** The variable, or for `menu_without_options` the menu node id. */
+  name: string;
+};
 
 const DEFAULT_MAX_LEN = 200;
 
-/** A caller's value, trimmed with control characters stripped. Twin: `clean`. */
+/** A caller's value with control characters stripped, then trimmed of Unicode
+ * White_Space plus U+FEFF (JS `\s` covers FEFF but not U+0085). Twin: `clean`
+ * in `vars.rs`. */
 function clean(value: string): string {
-  return value.replace(/\p{Cc}/gu, '').trim();
+  return value.replace(/\p{Cc}/gu, '').replace(/^[\s\u0085]+|[\s\u0085]+$/g, '');
 }
 
 function render(segments: Segment[], effective: (name: string) => string): string {
@@ -140,6 +146,11 @@ function render(segments: Segment[], effective: (name: string) => string): strin
  * variable it names got a non-default value; then it becomes the filled text.
  * A flow without variables comes back as a clone. A malformed template is
  * left as written (validation rejects those before fill is reached).
+ *
+ * Contract: validate the SOURCE flow first (`validateOutbound`); the result is
+ * not meant to be re-validated (a value may itself hold `{{`). `fill` keeps
+ * options and exits consistent, and refuses with `menu_without_options` when
+ * every option of a menu would be dropped.
  */
 export function fill(
   flow: Flow,
@@ -175,7 +186,7 @@ export function fill(
   };
 
   delete out.variables;
-  for (const node of Object.values(out.nodes)) {
+  for (const [id, node] of Object.entries(out.nodes)) {
     for (const [field, prompt] of nodePromptSlots(node)) {
       let next: typeof prompt = prompt;
       if (typeof prompt === 'string') {
@@ -190,16 +201,24 @@ export function fill(
       (node as unknown as Record<string, unknown>)[field] = next;
     }
     if (node.kind === 'menu') {
+      const dropped: string[] = [];
       for (const [key, label] of Object.entries(node.options)) {
         const bare = /^\{\{([^{}]*)\}\}$/.exec(label)?.[1];
         if (bare !== undefined && isVariableName(bare) && effective(bare) === '') {
-          delete node.options[key];
-          if (node.exits) delete node.exits[key];
+          dropped.push(key);
         } else {
           node.options[key] = fillText(label);
         }
       }
+      if (dropped.length > 0 && dropped.length === Object.keys(node.options).length) {
+        errors.push({ code: 'menu_without_options', name: id });
+        continue;
+      }
+      for (const key of dropped) {
+        delete node.options[key];
+        if (node.exits) delete node.exits[key];
+      }
     }
   }
-  return { flow: out };
+  return errors.length > 0 ? { errors } : { flow: out };
 }

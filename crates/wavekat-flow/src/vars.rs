@@ -147,6 +147,8 @@ pub enum FillError {
     Unknown(String),
     #[error("variable {name:?} is {len} characters; its max_len is {max}")]
     TooLong { name: String, max: u64, len: u64 },
+    #[error("filling leaves menu {node:?} with no options")]
+    NoOptions { node: String },
 }
 
 impl FillError {
@@ -155,17 +157,19 @@ impl FillError {
         match self {
             FillError::Unknown(_) => "variable_unknown",
             FillError::TooLong { .. } => "variable_too_long",
+            FillError::NoOptions { .. } => "menu_without_options",
         }
     }
 }
 
-/// A caller's value, trimmed with control characters stripped.
+/// A caller's value with control characters stripped, then trimmed of
+/// Unicode White_Space plus U+FEFF. Twin: `clean` in `vars.ts`.
 fn clean(value: &str) -> String {
     value
         .chars()
         .filter(|c| !c.is_control())
         .collect::<String>()
-        .trim()
+        .trim_matches(|c: char| c.is_whitespace() || c == '\u{FEFF}')
         .to_string()
 }
 
@@ -242,7 +246,7 @@ pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<
 
     let mut out = flow.clone();
     out.variables.clear();
-    for node in out.nodes.values_mut() {
+    for (node_id, node) in out.nodes.iter_mut() {
         for (_, prompt) in node.prompt_slots_mut() {
             match prompt {
                 Prompt::Text(text) => *text = fill_text(text),
@@ -272,6 +276,12 @@ pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<
                     *label = fill_text(label);
                 }
             }
+            if !dropped.is_empty() && dropped.len() == options.len() {
+                errors.push(FillError::NoOptions {
+                    node: node_id.clone(),
+                });
+                continue;
+            }
             for key in dropped {
                 options.shift_remove(&key);
                 if let Some(Exits(map)) = exits {
@@ -280,7 +290,11 @@ pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<
             }
         }
     }
-    Ok(out)
+    if errors.is_empty() {
+        Ok(out)
+    } else {
+        Err(errors)
+    }
 }
 
 #[cfg(test)]
@@ -471,7 +485,7 @@ mod tests {
 
     #[test]
     fn rendered_prompt_stays_audio_when_defaults_kept() {
-        let mut flow = Flow::from_yaml(
+        let flow = Flow::from_yaml(
             "schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  name: { default: there }\nnodes:\n  a:\n    kind: hangup\n    prompt: { audio: vprompt_a, template: \"Hi {{name}}\" }\n",
         )
         .unwrap();
@@ -497,7 +511,6 @@ mod tests {
             unreachable!()
         };
         assert!(matches!(prompt, Some(Prompt::Text(t)) if t == "Hi Ann"));
-        flow.variables.clear();
     }
 
     #[test]
@@ -548,14 +561,64 @@ mod tests {
     }
 
     #[test]
-    fn filled_flow_passes_validate_outbound() {
-        for v in [
-            vals(&[]),
-            vals(&[("option3", "Both"), ("option4", "Neither")]),
-        ] {
-            let filled = fill(&ask(), &v).unwrap();
-            crate::validate::validate_outbound(&filled).unwrap();
-        }
+    fn source_validates_and_fill_keeps_hostile_values_literal() {
+        crate::validate::validate_outbound(&ask()).unwrap();
+        let filled = fill(&ask(), &vals(&[("question", "{{option1}} {x}")])).unwrap();
+        assert!(menu(&filled).0.contains("{{option1}} {x}"));
+    }
+
+    #[test]
+    fn dropping_every_option_is_an_error() {
+        let flow = Flow::from_yaml(
+            "schema_version: 4\nid: f\nname: F\nentry: m\nvariables:\n  a: { default: \"\" }\nnodes:\n  m:\n    kind: menu\n    prompt: Pick\n    options: { \"1\": \"{{a}}\" }\n    exits: { \"1\": m, no_input: m, invalid: m }\n",
+        )
+        .unwrap();
+        let errs = fill(&flow, &BTreeMap::new()).unwrap_err();
+        assert_eq!(errs, vec![FillError::NoOptions { node: "m".into() }]);
+        assert_eq!(errs[0].code(), "menu_without_options");
+        assert!(fill(&flow, &vals(&[("a", "Yes")])).is_ok());
+    }
+
+    #[test]
+    fn odd_flows_never_panic() {
+        let base = "schema_version: 4\nid: f\nname: F\nentry: m\nvariables:\n  a: { default: \"\" }\n  b: { default: x }\nnodes:\n  m:\n    kind: menu\n";
+        // A menu with no exits block at all.
+        let no_exits = Flow::from_yaml(&format!(
+            "{base}    prompt: Pick\n    options: {{ \"1\": \"{{{{a}}}}\", \"2\": Two }}\n"
+        ))
+        .unwrap();
+        let filled = fill(&no_exits, &BTreeMap::new()).unwrap();
+        assert_eq!(menu_options(&filled), vec!["2"]);
+        // An options key with no matching exit.
+        let stray = Flow::from_yaml(&format!(
+            "{base}    prompt: Pick\n    options: {{ \"1\": \"{{{{a}}}}\", \"2\": Two }}\n    exits: {{ no_input: m }}\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            menu_options(&fill(&stray, &BTreeMap::new()).unwrap()),
+            vec!["2"]
+        );
+        // Malformed templates are left as written.
+        let bad = Flow::from_yaml(&format!(
+            "{base}    prompt: \"Hi {{{{b\"\n    options: {{ \"1\": \"{{{{#b}}}}\" }}\n    exits: {{ \"1\": m, no_input: m, invalid: m }}\n"
+        ))
+        .unwrap();
+        let filled = fill(&bad, &vals(&[("b", "y")])).unwrap();
+        let Node::Menu {
+            prompt, options, ..
+        } = &filled.nodes["m"]
+        else {
+            unreachable!()
+        };
+        assert!(matches!(prompt, Prompt::Text(t) if t == "Hi {{b"));
+        assert_eq!(options["1"], "{{#b}}");
+    }
+
+    fn menu_options(flow: &Flow) -> Vec<&str> {
+        let Node::Menu { options, .. } = &flow.nodes["m"] else {
+            unreachable!()
+        };
+        options.keys().map(String::as_str).collect()
     }
 
     #[test]
