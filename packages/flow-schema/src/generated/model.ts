@@ -1,4 +1,4 @@
-// GENERATED from schema/flow.v{1,2,3}.schema.json by scripts/generate.mjs — do not edit.
+// GENERATED from schema/flow.v{1,2,3,4}.schema.json by scripts/generate.mjs — do not edit.
 // Run `pnpm gen` after changing a schema; CI fails on drift.
 
 /**
@@ -16,11 +16,11 @@ export type Text = string;
 export type MessageTone = 'beep' | 'none';
 
 /**
- * The WaveKat call-flow ("Receptionist") document, schema_version 3. Version 3 is version 2 plus the screened transfer: the `transfer` node gains `whisper` and `timeout_secs`. Every version-2 document is a valid version-3 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
+ * The WaveKat call-flow ("Receptionist") document, schema_version 4. Version 4 is version 3 plus flow variables: a top-level `variables` map declares details filled in per call. Every version-3 document is a valid version-4 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
  */
 export interface Flow {
   /**
-   * Document format version. This file describes version 3 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
+   * Document format version. This file describes version 4 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
    */
   schema_version: number;
   /**
@@ -40,6 +40,12 @@ export interface Flow {
    */
   note?: string;
   /**
+   * Details a caller of this flow fills in per call, declared by name (a lowercase letter, then up to 31 lowercase letters, digits or underscores; the validators check the form, not the schema, so a reader never has to compile a pattern). Prompts and menu labels refer to them with `{{name}}` placeholders (read and checked from a later step; to this version of the schema they are plain text). Needs schema_version 4: a reader that ignored the map would speak the placeholders as written.
+   */
+  variables?: {
+    [k: string]: Variable;
+  };
+  /**
    * Node id where execution begins.
    */
   entry: string;
@@ -55,6 +61,28 @@ export interface Flow {
   ui?: {
     [k: string]: unknown;
   };
+  [k: string]: unknown;
+}
+/**
+ * One declared variable.
+ */
+export interface Variable {
+  /**
+   * What the value is, shown to whoever fills it in.
+   */
+  description?: string;
+  /**
+   * Whether a call must supply a non-empty value.
+   */
+  required?: boolean;
+  /**
+   * The value used when a call supplies none.
+   */
+  default?: string;
+  /**
+   * Longest a value may be, in Unicode characters.
+   */
+  max_len?: number;
   [k: string]: unknown;
 }
 /**

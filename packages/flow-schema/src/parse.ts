@@ -24,6 +24,7 @@ import type {
   MessageTone,
   Prompt,
   TimeRange,
+  Variable,
   Weekday,
   WeeklySchedule,
 } from './model.js';
@@ -188,6 +189,50 @@ function warnUnknownFields(
       );
     }
   }
+}
+
+/** The `variables` map: each entry declares one value filled in per call. */
+function decodeVariables(
+  value: unknown,
+  issues: Issue[],
+): Record<string, Variable> | undefined {
+  if (!isMap(value)) {
+    error(issues, 'expected_map', '"variables" must be a mapping of variable names', value);
+    return undefined;
+  }
+  const out: Record<string, Variable> = {};
+  for (const [name, field] of fieldsOf(value, 'variables', issues)) {
+    const context = `variable "${name}"`;
+    if (!isMap(field.value)) {
+      error(issues, 'expected_map', `${context} must be a mapping`, field.value);
+      continue;
+    }
+    const entry = fieldsOf(field.value, context, issues);
+    warnUnknownFields(entry, ['description', 'required', 'default', 'max_len'], context, issues);
+    const variable: Variable = {};
+    const description = entry.get('description');
+    if (description) {
+      const v = asString(description.value, `${context} description`, issues);
+      if (v !== undefined) variable.description = v;
+    }
+    const isRequired = entry.get('required');
+    if (isRequired) {
+      const v = asBool(isRequired.value, `${context} required`, issues);
+      if (v !== undefined) variable.required = v;
+    }
+    const dflt = entry.get('default');
+    if (dflt) {
+      const v = asString(dflt.value, `${context} default`, issues);
+      if (v !== undefined) variable.default = v;
+    }
+    const maxLen = entry.get('max_len');
+    if (maxLen) {
+      const v = asU32(maxLen.value, `${context} max_len`, issues);
+      if (v !== undefined) variable.max_len = v;
+    }
+    out[name] = variable;
+  }
+  return out;
 }
 
 function decodePrompt(value: unknown, label: string, issues: Issue[]): Prompt | undefined {
@@ -640,7 +685,7 @@ export function parseFlow(source: string): ParseResult {
   const fields = fieldsOf(root, 'flow document', issues);
   warnUnknownFields(
     fields,
-    ['schema_version', 'id', 'name', 'version', 'note', 'entry', 'nodes', 'ui'],
+    ['schema_version', 'id', 'name', 'version', 'note', 'variables', 'entry', 'nodes', 'ui'],
     'flow document',
     issues,
   );
@@ -656,6 +701,8 @@ export function parseFlow(source: string): ParseResult {
   const version = versionField ? asU32(versionField.value, 'version', issues) : 1;
   const noteField = fields.get('note');
   const note = noteField ? asString(noteField.value, 'note', issues) : undefined;
+  const variablesField = fields.get('variables');
+  const variables = variablesField ? decodeVariables(variablesField.value, issues) : undefined;
   const entryField = required(fields, 'entry', 'flow document', issues, root);
   const entry = entryField && asString(entryField.value, 'entry', issues);
 
@@ -704,6 +751,7 @@ export function parseFlow(source: string): ParseResult {
       name,
       version,
       ...(note === undefined ? {} : { note }),
+      ...(variables === undefined ? {} : { variables }),
       entry,
       nodes,
       ui: ui as Flow['ui'],

@@ -40,6 +40,10 @@ const MAX_TRANSFER_TIMEOUT_SECS: i64 = 120;
 /// on a `transfer`. Twin: `model.ts` `TRANSFER_FIELDS_MIN_SCHEMA_VERSION`.
 const TRANSFER_FIELDS_MIN_SCHEMA_VERSION: u32 = 3;
 
+/// The oldest `schema_version` that may declare `variables`. Twin:
+/// `model.ts` `VARIABLES_MIN_SCHEMA_VERSION`.
+const VARIABLES_MIN_SCHEMA_VERSION: u32 = 4;
+
 /// One thing wrong with a flow document. Carries enough context (node id,
 /// exit name, offending value) for the editor to point at it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -129,6 +133,9 @@ pub enum ValidationError {
         declared: i64,
     },
 
+    #[error("variables needs schema_version {required} (this document declares {declared})")]
+    VariablesRequireNewerSchema { required: u32, declared: i64 },
+
     #[error("transfer node {node:?} sets timeout_secs but has no whisper to screen with")]
     TimeoutWithoutWhisper { node: NodeId },
 
@@ -181,6 +188,7 @@ impl ValidationError {
             ValidationError::BookNeverOpen { .. } => "book_never_open",
             ValidationError::KindRequiresNewerSchema { .. } => "kind_requires_newer_schema",
             ValidationError::FieldRequiresNewerSchema { .. } => "field_requires_newer_schema",
+            ValidationError::VariablesRequireNewerSchema { .. } => "field_requires_newer_schema",
             ValidationError::TimeoutWithoutWhisper { .. } => "timeout_without_whisper",
             ValidationError::TransferTimeoutOutOfRange { .. } => "transfer_timeout_out_of_range",
             ValidationError::OutboundNodeNotAllowed { .. } => "outbound_node_not_allowed",
@@ -213,6 +221,11 @@ fn kind_min_schema_version(kind: &str) -> i64 {
 ///
 /// Twin: `model.ts` `requiredSchemaVersion`.
 pub fn required_schema_version(flow: &Flow) -> i64 {
+    let variables = if !flow.variables.is_empty() {
+        i64::from(VARIABLES_MIN_SCHEMA_VERSION)
+    } else {
+        1
+    };
     flow.nodes
         .values()
         .map(|node| {
@@ -230,6 +243,7 @@ pub fn required_schema_version(flow: &Flow) -> i64 {
         })
         .max()
         .unwrap_or(1)
+        .max(variables)
 }
 
 /// Validate a parsed flow. `Ok(())` means safe to publish / execute; `Err`
@@ -244,6 +258,13 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
         errs.push(ValidationError::UnsupportedSchemaVersion(
             flow.schema_version,
         ));
+    }
+
+    if !flow.variables.is_empty() && flow.schema_version < i64::from(VARIABLES_MIN_SCHEMA_VERSION) {
+        errs.push(ValidationError::VariablesRequireNewerSchema {
+            required: VARIABLES_MIN_SCHEMA_VERSION,
+            declared: flow.schema_version,
+        });
     }
 
     if flow.nodes.is_empty() {

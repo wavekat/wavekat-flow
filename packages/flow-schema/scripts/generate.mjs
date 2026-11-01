@@ -24,7 +24,7 @@ const repoRoot = resolve(pkg, '..', '..');
 const genDir = resolve(pkg, 'src', 'generated');
 
 // Oldest first; the last entry is the one the model is generated from.
-const VERSIONS = [1, 2, 3];
+const VERSIONS = [1, 2, 3, 4];
 const schemaPathFor = (v) => resolve(repoRoot, 'schema', `flow.v${v}.schema.json`);
 
 await mkdir(genDir, { recursive: true });

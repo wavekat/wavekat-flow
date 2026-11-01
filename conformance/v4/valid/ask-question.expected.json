@@ -1,0 +1,5 @@
+{
+  "description": "Flow variables: a top-level `variables` map declares details filled per call. The `{{name}}` placeholders in the prompt and menu labels are plain text to this version of the format; they are read and checked by a later step, so here they only have to be accepted. The 9 key loops back to the same menu, which waits for a key and so is not an unbounded loop.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

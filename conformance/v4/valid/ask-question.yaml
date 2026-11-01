@@ -1,0 +1,25 @@
+schema_version: 4
+id: flow_ask_question
+name: Ask a question
+entry: ask
+variables:
+  intro:    { description: Who is asking, default: "Claude has a question." , max_len: 120 }
+  question: { description: The question, required: true, max_len: 300 }
+  option1:  { description: Answer for key 1, required: true, max_len: 80 }
+  option2:  { description: Answer for key 2, required: true, max_len: 80 }
+  option3:  { description: Answer for key 3, max_len: 80 }
+  option4:  { description: Answer for key 4, max_len: 80 }
+nodes:
+  ask:
+    kind: menu
+    prompt: "{{intro}} {{question}} Press 1 for {{option1}}. Press 2 for {{option2}}.{{#option3}} Press 3 for {{option3}}.{{/option3}}{{#option4}} Press 4 for {{option4}}.{{/option4}} Press 9 to hear this again."
+    options: { "1": "{{option1}}", "2": "{{option2}}", "3": "{{option3}}", "4": "{{option4}}", "9": Repeat }
+    retries: 2
+    timeout_secs: 8
+    exits: { "1": thanks, "2": thanks, "3": thanks, "4": thanks, "9": ask, no_input: bye, invalid: bye }
+  thanks:
+    kind: hangup
+    prompt: Got it, thanks. Goodbye.
+  bye:
+    kind: hangup
+    prompt: No answer recorded. The question will wait on screen. Goodbye.

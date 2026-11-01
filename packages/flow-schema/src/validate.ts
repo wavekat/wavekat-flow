@@ -20,6 +20,7 @@ import {
   MIN_TRANSFER_TIMEOUT_SECS,
   SUPPORTED_SCHEMA_VERSIONS,
   TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
+  VARIABLES_MIN_SCHEMA_VERSION,
   VALID_DIGITS,
   isScreenedTransfer,
   isTerminal,
@@ -64,6 +65,21 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
       code: 'unsupported_schema_version',
       message: `schema_version ${flow.schema_version} is not supported`,
       params: { version: flow.schema_version },
+    });
+  }
+
+  // Flow-level, so it carries no node. Same code as a transfer field on an
+  // older document: the field needs a newer version than the one declared.
+  if (flow.variables !== undefined && flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) {
+    issues.push({
+      severity: 'error',
+      code: 'field_requires_newer_schema',
+      message: `variables needs schema_version ${VARIABLES_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
+      params: {
+        field: 'variables',
+        required: VARIABLES_MIN_SCHEMA_VERSION,
+        declared: flow.schema_version,
+      },
     });
   }
 

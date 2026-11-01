@@ -27,6 +27,7 @@ export type {
   RingNode,
   TimeRange,
   TransferNode,
+  Variable,
   WeeklySchedule,
 } from './generated/model.js';
 
@@ -52,13 +53,13 @@ export type Component = Node;
 
 /** Schema versions this validator understands. Twin: `lib.rs`
  * `SUPPORTED_SCHEMA_VERSIONS`. */
-export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3];
+export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3, 4];
 
 /** The newest version this build authors — what a new document should
  * declare. Reading stays broad ({@link SUPPORTED_SCHEMA_VERSIONS});
  * writing is deliberately one number. Twin: `lib.rs`
  * `CURRENT_SCHEMA_VERSION`. */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** The shortest and longest a screened transfer may ring the person's
  * phone, in seconds. Twin: `validate.rs` `MIN_TRANSFER_TIMEOUT_SECS` /
@@ -69,6 +70,10 @@ export const MAX_TRANSFER_TIMEOUT_SECS = 120;
 /** The oldest `schema_version` that may put `whisper` or `timeout_secs` on
  * a `transfer`. Twin: `validate.rs` `TRANSFER_FIELDS_MIN_SCHEMA_VERSION`. */
 export const TRANSFER_FIELDS_MIN_SCHEMA_VERSION = 3;
+
+/** The oldest `schema_version` that may declare `variables`. Twin:
+ * `validate.rs` `VARIABLES_MIN_SCHEMA_VERSION`. */
+export const VARIABLES_MIN_SCHEMA_VERSION = 4;
 
 /** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
  * `validate.rs` `MAX_PROMPT_CHARS`. */
@@ -152,6 +157,7 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
 export function requiredSchemaVersion(flow: Flow): number {
   return Math.max(
     1,
+    flow.variables !== undefined ? VARIABLES_MIN_SCHEMA_VERSION : 1,
     ...Object.values(flow.nodes).map((node) =>
       Math.max(
         KIND_MIN_SCHEMA_VERSION[node.kind],
