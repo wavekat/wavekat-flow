@@ -4,11 +4,11 @@ name: Ask a question
 entry: ask
 variables:
   intro:    { description: Who is asking, default: "Claude has a question." , max_len: 120 }
-  question: { description: The question, required: true, max_len: 300 }
-  option1:  { description: Answer for key 1, required: true, max_len: 80 }
-  option2:  { description: Answer for key 2, required: true, max_len: 80 }
-  option3:  { description: Answer for key 3, max_len: 80 }
-  option4:  { description: Answer for key 4, max_len: 80 }
+  question: { description: The question, default: "Claude needs your input on screen.", max_len: 300 }
+  option1:  { description: Answer for key 1, default: "Yes", max_len: 80 }
+  option2:  { description: Answer for key 2, default: "No", max_len: 80 }
+  option3:  { description: Answer for key 3, default: "", max_len: 80 }
+  option4:  { description: Answer for key 4, default: "", max_len: 80 }
 nodes:
   ask:
     kind: menu

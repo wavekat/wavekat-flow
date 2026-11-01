@@ -580,6 +580,7 @@ async fn run_book<E: FlowEffects>(
                     fx.speak(&Prompt::Audio {
                         audio: reference,
                         transcript: None,
+                        template: None,
                     })
                     .await
                     .map_err(EngineError::Effect)?;
@@ -598,6 +599,7 @@ async fn run_book<E: FlowEffects>(
                 fx.speak(&Prompt::Audio {
                     audio: book::taken_ref(),
                     transcript: None,
+                    template: None,
                 })
                 .await
                 .map_err(EngineError::Effect)?;
@@ -643,6 +645,7 @@ async fn collect_offer_choice<E: FlowEffects>(
                 fx.speak(&Prompt::Audio {
                     audio: reference,
                     transcript: None,
+                    template: None,
                 })
                 .await
                 .map_err(EngineError::Effect)?;

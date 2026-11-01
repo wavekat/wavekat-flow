@@ -1,0 +1,5 @@
+{
+  "description": "A version 3 document may not give an audio prompt a `template`: an older engine would ignore it and play the clip with the defaults it was voiced from, so the field needs the version that has it.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["field_requires_newer_schema"] }
+}

@@ -1,0 +1,6 @@
+{
+  "description": "An audio prompt may keep the `template` it was voiced from, so a call that overrides a variable can speak the filled text instead of the clip. The clip is a required asset as ever; `template` is advisory to a reader that does not fill (here it is plain text, not yet scanned).",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] },
+  "requiredAssets": ["vprompt_abc123"]
+}

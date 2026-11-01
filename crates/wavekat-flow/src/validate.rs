@@ -44,6 +44,10 @@ const TRANSFER_FIELDS_MIN_SCHEMA_VERSION: u32 = 3;
 /// `model.ts` `VARIABLES_MIN_SCHEMA_VERSION`.
 const VARIABLES_MIN_SCHEMA_VERSION: u32 = 4;
 
+/// The oldest `schema_version` that may give an audio prompt a `template`.
+/// Twin: `model.ts` `TEMPLATE_MIN_SCHEMA_VERSION`.
+const TEMPLATE_MIN_SCHEMA_VERSION: u32 = 4;
+
 /// One thing wrong with a flow document. Carries enough context (node id,
 /// exit name, offending value) for the editor to point at it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -243,7 +247,14 @@ pub fn required_schema_version(flow: &Flow) -> i64 {
                 }
                 _ => 1,
             };
-            kind_min_schema_version(node.kind()).max(fields)
+            let template = if node.prompts().iter().any(|p| p.template().is_some()) {
+                i64::from(TEMPLATE_MIN_SCHEMA_VERSION)
+            } else {
+                1
+            };
+            kind_min_schema_version(node.kind())
+                .max(fields)
+                .max(template)
         })
         .max()
         .unwrap_or(1)
@@ -286,6 +297,7 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
         check_exits(id, node, flow, &mut errs);
         check_node(id, node, &mut errs);
         check_transfer_fields_version(id, node, flow.schema_version, &mut errs);
+        check_template_version(id, node, flow.schema_version, &mut errs);
 
         // A component the document's own version doesn't have. Checked
         // per node rather than once per flow so the editor points at the
@@ -348,6 +360,27 @@ fn check_transfer_fields_version(
                 declared,
             });
         }
+    }
+}
+
+/// `template` on an audio prompt of a document older than the version that
+/// has it. One error per node, whichever prompt carries it.
+fn check_template_version(
+    id: &NodeId,
+    node: &Node,
+    declared: i64,
+    errs: &mut Vec<ValidationError>,
+) {
+    if declared >= i64::from(TEMPLATE_MIN_SCHEMA_VERSION) {
+        return;
+    }
+    if node.prompts().iter().any(|p| p.template().is_some()) {
+        errs.push(ValidationError::FieldRequiresNewerSchema {
+            node: id.clone(),
+            field: "template",
+            required: TEMPLATE_MIN_SCHEMA_VERSION,
+            declared,
+        });
     }
 }
 
@@ -1550,7 +1583,7 @@ nodes:
         assert_eq!(validate_outbound(&parse(&src)), Ok(()));
     }
     // ── flow variables ───────────────────────────────────────────────────
-    const WITH_VARIABLES: &str = "schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  q: { required: true }\nnodes:\n  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n";
+    const WITH_VARIABLES: &str = "schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  q: { default: hi }\nnodes:\n  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n";
 
     #[test]
     fn variables_need_v4() {
@@ -1578,10 +1611,37 @@ nodes:
     fn empty_variables_are_no_variables() {
         let src = WITH_VARIABLES
             .replace("schema_version: 4", "schema_version: 3")
-            .replace("  q: { required: true }\n", "")
+            .replace("  q: { default: hi }\n", "")
             .replace("variables:\n", "variables: {}\n");
         let flow = parse(&src);
         assert_eq!(required_schema_version(&flow), 1);
         assert_eq!(validate(&flow), Ok(()));
+    }
+
+    const WITH_TEMPLATE: &str = "schema_version: 4\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hangup\n    prompt: { audio: vprompt_abc123, template: \"Hi {{name}}\" }\n";
+
+    #[test]
+    fn template_needs_v4() {
+        let flow = parse(WITH_TEMPLATE);
+        assert_eq!(required_schema_version(&flow), 4);
+        assert_eq!(validate(&flow), Ok(()));
+        let plain = WITH_TEMPLATE.replace(", template: \"Hi {{name}}\"", "");
+        assert_eq!(required_schema_version(&parse(&plain)), 1);
+    }
+
+    #[test]
+    fn template_in_v3_is_refused() {
+        let src = WITH_TEMPLATE.replace("schema_version: 4", "schema_version: 3");
+        let errs = validate(&parse(&src)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![ValidationError::FieldRequiresNewerSchema {
+                node: "a".into(),
+                field: "template",
+                required: 4,
+                declared: 3,
+            }]
+        );
+        assert_eq!(errs[0].code(), "field_requires_newer_schema");
     }
 }

@@ -20,11 +20,14 @@ import {
   MIN_TRANSFER_TIMEOUT_SECS,
   SUPPORTED_SCHEMA_VERSIONS,
   TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
+  TEMPLATE_MIN_SCHEMA_VERSION,
   VARIABLES_MIN_SCHEMA_VERSION,
   hasVariables,
   VALID_DIGITS,
   isScreenedTransfer,
   isTerminal,
+  nodePrompts,
+  promptTemplate,
   promptText,
   requiredExits,
 } from './model.js';
@@ -101,6 +104,21 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
   }
 
   for (const [id, node] of Object.entries(flow.nodes)) {
+    if (
+      flow.schema_version < TEMPLATE_MIN_SCHEMA_VERSION &&
+      nodePrompts(node).some((p) => promptTemplate(p) !== null)
+    ) {
+      issues.push({
+        ...at(id),
+        code: 'field_requires_newer_schema',
+        message: `node "${id}" gives a prompt a template, which needs schema_version ${TEMPLATE_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
+        params: {
+          field: 'template',
+          required: TEMPLATE_MIN_SCHEMA_VERSION,
+          declared: flow.schema_version,
+        },
+      });
+    }
     const exits = node.exits ?? {};
     // Exit keys must be exactly the set the component defines, and
     // every target must exist.

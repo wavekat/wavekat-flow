@@ -1,4 +1,4 @@
 {
-  "description": "Top-level `variables` is written right after `note` and before `entry`, each variable in schema property order (`description`, `required`, `default`, `max_len`). A `required: false` and a `max_len: 200` equal their defaults and are dropped; an empty `default` is a value, not a default, so it stays.",
+  "description": "Top-level `variables` is written right after `note` and before `entry`, each variable in schema property order (`description`, `default`, `max_len`). A `max_len` equal to its default (200) is dropped; an empty `default` is a value, and it stays.",
   "comments": 1
 }

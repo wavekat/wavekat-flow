@@ -138,6 +138,10 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
   book: 2,
 };
 
+/** The oldest `schema_version` that may give an audio prompt a `template`.
+ * Twin: `validate.rs` `TEMPLATE_MIN_SCHEMA_VERSION`. */
+export const TEMPLATE_MIN_SCHEMA_VERSION = 4;
+
 /** An empty `variables` map declares nothing, so it is the same as none. */
 export function hasVariables(flow: Flow): boolean {
   return flow.variables !== undefined && Object.keys(flow.variables).length > 0;
@@ -166,6 +170,7 @@ export function requiredSchemaVersion(flow: Flow): number {
     ...Object.values(flow.nodes).map((node) =>
       Math.max(
         KIND_MIN_SCHEMA_VERSION[node.kind],
+        nodePrompts(node).some((p) => promptTemplate(p) !== null) ? TEMPLATE_MIN_SCHEMA_VERSION : 1,
         node.kind === 'transfer' && (node.whisper !== undefined || node.timeout_secs !== undefined)
           ? TRANSFER_FIELDS_MIN_SCHEMA_VERSION
           : 1,
@@ -284,6 +289,16 @@ export function promptAudio(prompt: Prompt): string | null {
 export function promptTranscript(prompt: Prompt): string | null {
   if (typeof prompt === 'string') return prompt;
   return typeof prompt.transcript === 'string' ? prompt.transcript : null;
+}
+
+/**
+ * The `{{name}}` text an audio prompt was voiced from with its variables'
+ * defaults, `null` for a text prompt or a plain clip. Not scanned here.
+ * Twin: `model_ext.rs` `Prompt::template`.
+ */
+export function promptTemplate(prompt: Prompt): string | null {
+  if (typeof prompt === 'string') return null;
+  return typeof prompt.template === 'string' ? prompt.template : null;
 }
 
 /**

@@ -2,7 +2,7 @@ schema_version: 4
 id: flow_vars_canon
 name: Ask a question
 variables:
-  question: { description: The question, required: true, max_len: 300 }
+  question: { description: The question, default: Ready?, max_len: 300 }
   note_to_self: { default: "" }
 entry: ask
 nodes:

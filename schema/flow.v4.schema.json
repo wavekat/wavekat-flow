@@ -51,18 +51,14 @@
     "Variable": {
       "description": "One declared variable.",
       "type": "object",
+      "required": ["default"],
       "properties": {
         "description": {
           "description": "What the value is, shown to whoever fills it in.",
           "type": "string"
         },
-        "required": {
-          "description": "Whether a call must supply a non-empty value.",
-          "type": "boolean",
-          "default": false
-        },
         "default": {
-          "description": "The value used when a call supplies none.",
+          "description": "The value used when a call supplies none, so a flow always plays with no values given. May be an empty string, for a slot that is optional.",
           "type": "string"
         },
         "max_len": {
@@ -89,6 +85,10 @@
             },
             "transcript": {
               "description": "The words this pre-rendered clip speaks — the text it was synthesized from — carried so a viewer can show what a caller hears, and for traces. Advisory only: playback always uses `audio`, never this. Optional and forward-added: absent on older documents and on refs the platform did not generate from text.",
+              "type": "string"
+            },
+            "template": {
+              "description": "The text with `{{name}}` placeholders that `audio` was voiced from using the variables' defaults. A call that overrides a variable speaks the filled template instead of the clip; a call that does not plays `audio`. Only on an audio prompt, and only from schema_version 4: an older reader ignores it and plays the clip.",
               "type": "string"
             }
           }

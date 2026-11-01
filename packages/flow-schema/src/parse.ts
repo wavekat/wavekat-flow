@@ -208,22 +208,15 @@ function decodeVariables(
       continue;
     }
     const entry = fieldsOf(field.value, context, issues);
-    warnUnknownFields(entry, ['description', 'required', 'default', 'max_len'], context, issues);
-    const variable: Variable = {};
+    warnUnknownFields(entry, ['description', 'default', 'max_len'], context, issues);
+    const dflt = required(entry, 'default', context, issues, field.value);
+    const defaultValue = dflt && asString(dflt.value, `${context} default`, issues);
+    if (defaultValue === undefined) continue;
+    const variable: Variable = { default: defaultValue };
     const description = entry.get('description');
     if (description) {
       const v = asString(description.value, `${context} description`, issues);
       if (v !== undefined) variable.description = v;
-    }
-    const isRequired = entry.get('required');
-    if (isRequired) {
-      const v = asBool(isRequired.value, `${context} required`, issues);
-      if (v !== undefined) variable.required = v;
-    }
-    const dflt = entry.get('default');
-    if (dflt) {
-      const v = asString(dflt.value, `${context} default`, issues);
-      if (v !== undefined) variable.default = v;
     }
     const maxLen = entry.get('max_len');
     if (maxLen) {
@@ -242,15 +235,25 @@ function decodePrompt(value: unknown, label: string, issues: Issue[]): Prompt | 
     // `transcript` is the words the clip speaks, carried for display and
     // traces (model `Audio.transcript`); advisory only — playback still uses
     // `audio`. Known here so it neither warns nor gets dropped on decode.
-    warnUnknownFields(fields, ['audio', 'transcript'], label, issues);
+    warnUnknownFields(fields, ['audio', 'transcript', 'template'], label, issues);
     const audio = fields.get('audio');
     if (audio) {
       const ref = asString(audio.value, `${label} audio`, issues);
       if (ref === undefined) return undefined;
+      const out: { audio: string; transcript?: string; template?: string } = { audio: ref };
       const transcriptField = fields.get('transcript');
-      if (!transcriptField) return { audio: ref };
-      const transcript = asString(transcriptField.value, `${label} transcript`, issues);
-      return transcript === undefined ? undefined : { audio: ref, transcript };
+      if (transcriptField) {
+        const transcript = asString(transcriptField.value, `${label} transcript`, issues);
+        if (transcript === undefined) return undefined;
+        out.transcript = transcript;
+      }
+      const templateField = fields.get('template');
+      if (templateField) {
+        const template = asString(templateField.value, `${label} template`, issues);
+        if (template === undefined) return undefined;
+        out.template = template;
+      }
+      return out;
     }
   }
   error(issues, 'bad_prompt', `${label} must be text or { audio: ref }`, value);

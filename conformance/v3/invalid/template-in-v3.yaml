@@ -1,0 +1,12 @@
+schema_version: 3
+id: flow_template_in_v3
+name: Template in a version 3 document
+entry: ask
+nodes:
+  ask:
+    kind: greeting
+    prompt: { audio: vprompt_abc123, template: "Hi {{name}}" }
+    exits: { next: bye }
+  bye:
+    kind: hangup
+    prompt: Goodbye.

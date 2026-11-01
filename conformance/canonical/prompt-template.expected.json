@@ -1,0 +1,4 @@
+{
+  "description": "An audio prompt that keeps its `template` writes it after `transcript` (`audio`, `transcript`, `template`), the schema property order.",
+  "comments": 0
+}

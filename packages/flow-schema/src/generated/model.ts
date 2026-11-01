@@ -72,13 +72,9 @@ export interface Variable {
    */
   description?: string;
   /**
-   * Whether a call must supply a non-empty value.
+   * The value used when a call supplies none, so a flow always plays with no values given. May be an empty string, for a slot that is optional.
    */
-  required?: boolean;
-  /**
-   * The value used when a call supplies none.
-   */
-  default?: string;
+  default: string;
   /**
    * Longest a value may be, in Unicode characters.
    */
@@ -107,6 +103,10 @@ export interface Audio {
    * The words this pre-rendered clip speaks — the text it was synthesized from — carried so a viewer can show what a caller hears, and for traces. Advisory only: playback always uses `audio`, never this. Optional and forward-added: absent on older documents and on refs the platform did not generate from text.
    */
   transcript?: string;
+  /**
+   * The text with `{{name}}` placeholders that `audio` was voiced from using the variables' defaults. A call that overrides a variable speaks the filled template instead of the clip; a call that does not plays `audio`. Only on an audio prompt, and only from schema_version 4: an older reader ignores it and plays the clip.
+   */
+  template?: string;
   [k: string]: unknown;
 }
 /**

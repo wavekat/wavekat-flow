@@ -10,7 +10,7 @@ version it declares, and no other.
 | `flow.v1.schema.json` | `schema_version: 1` | the original seven components |
 | `flow.v2.schema.json` | `schema_version: 2` | `book` — appointment booking over the phone |
 | `flow.v3.schema.json` | `schema_version: 3` | `transfer` gains `whisper` and `timeout_secs` — a screened transfer |
-| `flow.v4.schema.json` | `schema_version: 4` | top-level `variables` — details a caller fills in per call |
+| `flow.v4.schema.json` | `schema_version: 4` | top-level `variables` (each with a required `default`) — details a caller fills in per call; an audio prompt may keep its `template` |
 
 Version 2 is version 1 plus one component: every v1 document is a valid v2
 document once its `schema_version` is bumped, and nothing else changed.
