@@ -701,6 +701,7 @@ async fn run_menu<E: FlowEffects>(
                     "menu",
                     StepDetail::MenuChoice {
                         digit: digit.as_key().to_string(),
+                        label: options.get(digit.as_key()).cloned(),
                     },
                 );
                 return goto(id, node, digit.as_key());
@@ -1071,13 +1072,49 @@ nodes:
         assert_eq!(trace.steps[1].detail, StepDetail::Hours { open: false });
         assert_eq!(
             trace.steps[2].detail,
-            StepDetail::MenuChoice { digit: "1".into() }
+            StepDetail::MenuChoice {
+                digit: "1".into(),
+                label: Some("Hours".into())
+            }
         );
         // The caller heard the opening-hours greeting.
         assert!(fx
             .spoken
             .iter()
             .any(|s| s.contains("open Tuesday to Sunday")));
+    }
+
+    #[tokio::test]
+    async fn menu_choice_carries_its_label() {
+        let mut fx = MockEffects::new(closed_time())
+            .digits([Some(Digit::D1)])
+            .message_secs(5);
+        let trace = run_trace(&luigis(), &mut fx).await;
+        assert_eq!(
+            trace.steps[2].detail,
+            StepDetail::MenuChoice {
+                digit: "1".into(),
+                label: Some("Hours".into())
+            }
+        );
+        let json = serde_json::to_value(&trace.steps[2].detail).unwrap();
+        assert_eq!(json["label"], "Hours");
+    }
+
+    #[test]
+    fn old_menu_choice_json_still_reads() {
+        let d: StepDetail =
+            serde_json::from_str(r#"{"detail":"menu_choice","digit":"1"}"#).unwrap();
+        assert_eq!(
+            d,
+            StepDetail::MenuChoice {
+                digit: "1".into(),
+                label: None
+            }
+        );
+        // No label key is written when there is none.
+        let json = serde_json::to_value(&d).unwrap();
+        assert!(json.get("label").is_none());
     }
 
     #[tokio::test]
@@ -1121,7 +1158,10 @@ nodes:
 
         assert_eq!(
             trace.steps[2].detail,
-            StepDetail::MenuChoice { digit: "1".into() }
+            StepDetail::MenuChoice {
+                digit: "1".into(),
+                label: Some("Hours".into())
+            }
         );
         assert_eq!(trace.outcome, FlowOutcome::MessageLeft);
     }
