@@ -1,0 +1,12 @@
+schema_version: 3
+id: flow_braces
+name: Braces are just text
+entry: say
+nodes:
+  say:
+    kind: greeting
+    prompt: "Press {{1}} now, or {{ stay on the line }}."
+    exits: { next: bye }
+  bye:
+    kind: hangup
+    prompt: Goodbye.

@@ -75,6 +75,10 @@ export const TRANSFER_FIELDS_MIN_SCHEMA_VERSION = 3;
  * `validate.rs` `VARIABLES_MIN_SCHEMA_VERSION`. */
 export const VARIABLES_MIN_SCHEMA_VERSION = 4;
 
+/** The longest a variable's `max_len` may be, in characters. The schema
+ * carries the same cap. Twin: `validate.rs` `MAX_VARIABLE_LEN`. */
+export const MAX_VARIABLE_LEN = 500;
+
 /** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
  * `validate.rs` `MAX_PROMPT_CHARS`. */
 export const MAX_PROMPT_CHARS = 2000;

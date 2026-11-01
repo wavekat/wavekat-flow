@@ -64,3 +64,13 @@ export {
   setSchemaVersion,
   stampIdentity,
 } from './mutate.js';
+
+export {
+  isVariableName,
+  parseTemplate,
+  templateErrorCode,
+  templateIssues,
+  templateNames,
+  tryParseTemplate,
+} from './vars.js';
+export type { Segment, TemplateError } from './vars.js';

@@ -41,6 +41,7 @@ pub mod engine;
 pub mod hours;
 pub mod trace;
 pub mod validate;
+pub mod vars;
 
 /// Re-exported so callers name the generated maps' type without a matching
 /// `indexmap` dependency of their own.

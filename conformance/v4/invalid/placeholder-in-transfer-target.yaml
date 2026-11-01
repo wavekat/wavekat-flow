@@ -1,0 +1,10 @@
+schema_version: 4
+id: flow_placeholder_target
+name: Placeholder in a phone number
+entry: go
+variables:
+  number: { description: Who to ring, default: "+6491234567", max_len: 20 }
+nodes:
+  go:
+    kind: transfer
+    target: "{{number}}"
