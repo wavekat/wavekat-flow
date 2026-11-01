@@ -4,9 +4,16 @@
 // A template is text with `{{name}}` placeholders and `{{#name}}…{{/name}}`
 // conditional blocks (kept only when the variable's value is non-empty).
 // Blocks do not nest and have no else. Names are `[a-z][a-z0-9_]{0,31}`.
+//
+// `fill` gives each name an effective value: the caller's, cleaned, or the
+// variable's default when the caller gives none or a blank one. So a blank
+// value falls back to the default; it cannot clear a default. Only a menu
+// option whose label is exactly a bare `{{name}}` is dropped when its
+// effective value is empty; any other text that holds an empty placeholder is
+// kept, with the placeholder filled as nothing.
 
 import type { Flow } from './model.js';
-import { nodePromptSlots } from './model.js';
+import { DEFAULT_VARIABLE_MAX_LEN, MAX_PROMPT_CHARS, nodePromptSlots } from './model.js';
 
 /** One piece of a parsed template. A block's body holds only text and vars. */
 export type Segment =
@@ -109,12 +116,11 @@ export function templateNames(s: string): string[] {
 
 /** Why `fill` refused a value. */
 export type FillError = {
-  code: 'variable_unknown' | 'variable_too_long' | 'menu_without_options';
-  /** The variable, or for `menu_without_options` the menu node id. */
+  code: 'variable_unknown' | 'variable_too_long' | 'menu_without_options' | 'prompt_too_long';
+  /** The variable, or for `menu_without_options` and `prompt_too_long` the
+   * node id. */
   name: string;
 };
-
-const DEFAULT_MAX_LEN = 200;
 
 /** A caller's value with control characters stripped, then trimmed of Unicode
  * White_Space plus U+FEFF (JS `\s` covers FEFF but not U+0085). Twin: `clean`
@@ -135,22 +141,27 @@ function render(segments: Segment[], effective: (name: string) => string): strin
 
 /**
  * Turn a flow with variables plus a caller's values into a plain flow the
- * engine can run: every placeholder replaced, `variables` gone,
- * `schema_version` unchanged. The input is not modified. Twin: `vars.rs` `fill`.
+ * engine can run: every placeholder replaced, `variables` and every audio
+ * prompt's `template` gone, and a declared `schema_version` of 4 or more set
+ * to 3. The input is not modified. Twin: `vars.rs` `fill`.
  *
  * A name's effective value is the caller's (trimmed, control characters
- * stripped) when that is non-empty, else the variable's default. Values are
- * inserted as text and never parsed again. A menu option whose label is
- * exactly `{{name}}` with an empty value is removed, with its exit. An audio
- * prompt with a `template` stays audio (dropping the template) unless a
- * variable it names got a non-default value; then it becomes the filled text.
- * A flow without variables comes back as a clone. A malformed template is
- * left as written (validation rejects those before fill is reached).
+ * stripped) when that is non-empty, else the variable's default; so a blank
+ * value falls back to the default and cannot clear it. Values are inserted as
+ * text and never parsed again. A menu option whose label is exactly a bare
+ * `{{name}}` with an empty effective value is removed, with its exit; any
+ * other label is filled and kept. An audio prompt with a `template` stays
+ * audio (dropping the template) unless a variable it names got a non-default
+ * value; then it becomes the filled text. A v1-v3 flow without variables
+ * comes back as a clone. A malformed template is left as written (validation
+ * rejects those before fill is reached).
  *
- * Contract: validate the SOURCE flow first (`validateOutbound`); the result is
- * not meant to be re-validated (a value may itself hold `{{`). `fill` keeps
- * options and exits consistent, and refuses with `menu_without_options` when
- * every option of a menu would be dropped.
+ * Contract: validate the SOURCE flow first (`validateOutbound`). The result is
+ * a v3 document that validates on its own: a value holding `{{` is plain text
+ * in v3, and `fill` keeps options and exits consistent. Errors:
+ * `variable_unknown`, `variable_too_long`, `menu_without_options` when every
+ * option of a menu would be dropped, and `prompt_too_long` when a filled
+ * prompt is longer than validation allows.
  */
 export function fill(
   flow: Flow,
@@ -158,7 +169,13 @@ export function fill(
 ): { flow: Flow } | { errors: FillError[] } {
   const declared = flow.variables ?? {};
   const out = structuredClone(flow);
-  if (Object.keys(declared).length === 0 && Object.keys(values).length === 0) return { flow: out };
+  if (
+    Object.keys(declared).length === 0 &&
+    Object.keys(values).length === 0 &&
+    flow.schema_version < 4
+  ) {
+    return { flow: out };
+  }
 
   const errors: FillError[] = [];
   const given = new Map<string, string>();
@@ -169,7 +186,7 @@ export function fill(
       continue;
     }
     const value = clean(values[name] ?? '');
-    if ([...value].length > (variable.max_len ?? DEFAULT_MAX_LEN)) {
+    if ([...value].length > (variable.max_len ?? DEFAULT_VARIABLE_MAX_LEN)) {
       errors.push({ code: 'variable_too_long', name });
     } else if (value !== '') {
       given.set(name, value);
@@ -186,7 +203,10 @@ export function fill(
   };
 
   delete out.variables;
+  // Variables and templates are gone, so what is left is a v3 document.
+  if (out.schema_version >= 4) out.schema_version = 3;
   for (const [id, node] of Object.entries(out.nodes)) {
+    let tooLong = false;
     for (const [field, prompt] of nodePromptSlots(node)) {
       let next: typeof prompt = prompt;
       if (typeof prompt === 'string') {
@@ -198,8 +218,10 @@ export function fill(
         );
         next = overridden ? fillText(template) : clip;
       }
+      if (typeof next === 'string' && [...next].length > MAX_PROMPT_CHARS) tooLong = true;
       (node as unknown as Record<string, unknown>)[field] = next;
     }
+    if (tooLong) errors.push({ code: 'prompt_too_long', name: id });
     if (node.kind === 'menu') {
       const dropped: string[] = [];
       for (const [key, label] of Object.entries(node.options)) {

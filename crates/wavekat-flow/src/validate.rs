@@ -25,7 +25,7 @@ use crate::SUPPORTED_SCHEMA_VERSIONS;
 /// prompt that would trap a caller under minutes of TTS; generous enough that
 /// no real greeting hits it. Audio-asset prompts are unbounded here. Twin:
 /// `packages/flow-schema/src/model.ts` `MAX_PROMPT_CHARS`.
-const MAX_PROMPT_CHARS: usize = 2000;
+pub(crate) const MAX_PROMPT_CHARS: usize = 2000;
 
 /// The DTMF keys a `menu` option may be keyed by. Twin:
 /// `packages/flow-schema/src/model.ts` `VALID_DIGITS`.
@@ -156,6 +156,9 @@ pub enum ValidationError {
     #[error("variable {name:?} max_len is {value} (allowed: 1-{MAX_VARIABLE_LEN})")]
     VariableMaxLenOutOfRange { name: String, value: u64 },
 
+    #[error("variable {name:?} default is {len} characters; its max_len is {max}")]
+    VariableDefaultTooLong { name: String, max: u64, len: u64 },
+
     #[error("node {node:?} {field} has a malformed placeholder: {reason}")]
     TemplateSyntax {
         node: NodeId,
@@ -233,6 +236,7 @@ impl ValidationError {
             ValidationError::VariablesRequireNewerSchema { .. } => "field_requires_newer_schema",
             ValidationError::VariableBadName { .. } => "variable_bad_name",
             ValidationError::VariableMaxLenOutOfRange { .. } => "variable_max_len_out_of_range",
+            ValidationError::VariableDefaultTooLong { .. } => "variable_default_too_long",
             ValidationError::TemplateSyntax { .. } => "template_syntax",
             ValidationError::UnknownVariable { .. } => "unknown_variable",
             ValidationError::PlaceholderNotAllowed { .. } => "placeholder_not_allowed",
@@ -370,9 +374,10 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
     }
 }
 
-/// Declared variable names and `max_len`s, and placeholder-looking text in
-/// the flow's own string fields. Only on a v4 document: before that `{{`
-/// is ordinary text and `variables` is refused as a whole.
+/// Declared variable names, `max_len`s and defaults, and placeholder-looking
+/// text in the flow's own `id` and `name` (its `note` is a comment and never
+/// scanned). Only on a v4 document: before that `{{` is ordinary text and
+/// `variables` is refused as a whole.
 fn check_variables(flow: &Flow, errs: &mut Vec<ValidationError>) {
     if flow.schema_version < i64::from(VARIABLES_MIN_SCHEMA_VERSION) {
         return;
@@ -391,6 +396,15 @@ fn check_variables(flow: &Flow, errs: &mut Vec<ValidationError>) {
             errs.push(ValidationError::VariableMaxLenOutOfRange {
                 name: name.clone(),
                 value: max_len,
+            });
+        }
+        // A default is held to the same limit as a caller's value.
+        let len = flow.variables[name].default.chars().count() as u64;
+        if len > max_len {
+            errs.push(ValidationError::VariableDefaultTooLong {
+                name: name.clone(),
+                max: max_len,
+                len,
             });
         }
     }
@@ -453,13 +467,15 @@ fn check_placeholders(id: &NodeId, node: &Node, flow: &Flow, errs: &mut Vec<Vali
         }
     }
 
-    // Everything else: any string value holding `{{` is out of place.
+    // Everything else: any string value holding `{{` is out of place. A
+    // `note` is a comment for people, never read by the engine, so it is
+    // never scanned (nor is the flow's own note, see `check_variables`).
     let Ok(serde_json::Value::Object(map)) = serde_json::to_value(node) else {
         return;
     };
     let mut bad = Vec::new();
     for (key, value) in &map {
-        if key != "exits" && key != "kind" {
+        if !matches!(key.as_str(), "exits" | "kind" | "note") {
             collect_stray_braces(key, value, &mut bad);
         }
     }
@@ -1869,6 +1885,38 @@ nodes:
             "  a:\n    kind: hangup\n    prompt: bye\n",
         );
         assert_eq!(codes(&f), vec!["variable_max_len_out_of_range"]);
+    }
+
+    #[test]
+    fn v4_default_must_fit_max_len() {
+        // Counted in characters, like a caller's value.
+        let f = v4_flow(
+            "  q: { default: \"问问问\", max_len: 2 }\n",
+            "  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n",
+        );
+        let errs = validate(&parse(&f)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![ValidationError::VariableDefaultTooLong {
+                name: "q".into(),
+                max: 2,
+                len: 3
+            }]
+        );
+        assert_eq!(errs[0].code(), "variable_default_too_long");
+        let ok = v4_flow(
+            "  q: { default: \"问问\", max_len: 2 }\n",
+            "  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n",
+        );
+        assert_eq!(validate(&parse(&ok)), Ok(()));
+    }
+
+    #[test]
+    fn notes_are_never_scanned_for_placeholders() {
+        let f = parse(&format!(
+            "schema_version: 4\nid: f\nname: F\nnote: \"{{{{ghost}}}} {{{{#x\"\nentry: a\nvariables:\n{Q}nodes:\n  a:\n    kind: hangup\n    note: \"{{{{ghost}}}} {{{{#x\"\n    prompt: \"{{{{q}}}}\"\n"
+        ));
+        assert_eq!(validate(&f), Ok(()));
     }
 
     #[test]

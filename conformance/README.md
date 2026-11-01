@@ -28,10 +28,12 @@ of the outbound gate, which includes the base validation. These cases stay
 out of the top-level `valid/`/`invalid/` buckets because a flow refused for
 outbound — one with a `ring` step, say — is a perfectly good inbound flow.
 
-`fill/` pins `fill` (flow variables): per case, `<case>.input.yaml` (a v4 flow),
-`<case>.values.json` (the caller's values), and either `<case>.expected.yaml`
-(the filled flow, compared after canonical serialization) or
-`<case>.expected.json` = `{"errors": [codes]}` (the exact refusal).
+`fill/` pins `fill` (flow variables): per case, `<case>.input.yaml` (a v4 flow
+that passes `validate_outbound`), `<case>.values.json` (the caller's values),
+and either `<case>.expected.yaml` (the filled flow, compared after canonical
+serialization) or `<case>.expected.json` = `{"errors": [codes]}` (the exact
+refusal). A filled flow is a `schema_version: 3` document: both suites also
+check that it passes `validate_outbound` on its own and reads back as itself.
 
 Every `<case>.yaml` has a sibling `<case>.expected.json`:
 

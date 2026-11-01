@@ -14,6 +14,7 @@
 
 import type { BookNode, ComponentKind, Flow, Node, Prompt, TransferNode } from './model.js';
 import {
+  DEFAULT_VARIABLE_MAX_LEN,
   KIND_MIN_SCHEMA_VERSION,
   MAX_PROMPT_CHARS,
   MAX_VARIABLE_LEN,
@@ -375,9 +376,10 @@ function checkBookBounds(
   }
 }
 
-/** Declared variable names and `max_len`s, and placeholder-looking text in
- * the flow's own string fields. Only on a v4 document: before that `{{` is
- * ordinary text and `variables` is refused as a whole. Twin: `check_variables`. */
+/** Declared variable names, `max_len`s and defaults, and placeholder-looking
+ * text in the flow's own `id` and `name` (its `note` is a comment and never
+ * scanned). Only on a v4 document: before that `{{` is ordinary text and
+ * `variables` is refused as a whole. Twin: `check_variables`. */
 function checkVariables(flow: Flow, issues: Issue[]): void {
   if (flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) return;
   for (const name of Object.keys(flow.variables ?? {}).sort()) {
@@ -399,6 +401,17 @@ function checkVariables(flow: Flow, issues: Issue[]): void {
         code: 'variable_max_len_out_of_range',
         message: `variable "${name}" max_len is ${maxLen} (allowed: 1-${MAX_VARIABLE_LEN})`,
         params: { name, value: maxLen },
+      });
+    }
+    // A default is held to the same limit as a caller's value.
+    const max = maxLen ?? DEFAULT_VARIABLE_MAX_LEN;
+    const len = [...(flow.variables?.[name]?.default ?? '')].length;
+    if (len > max) {
+      issues.push({
+        severity: 'error',
+        code: 'variable_default_too_long',
+        message: `variable "${name}" default is ${len} characters; its max_len is ${max}`,
+        params: { name, max, len },
       });
     }
   }
@@ -466,10 +479,12 @@ function checkPlaceholders(
     }
   }
 
-  // Everything else: any string value holding `{{` is out of place.
+  // Everything else: any string value holding `{{` is out of place. A
+  // `note` is a comment for people, never read by the engine, so it is
+  // never scanned (nor is the flow's own note, see `checkVariables`).
   const bad: string[] = [];
   for (const [key, value] of Object.entries(node)) {
-    if (key !== 'exits' && key !== 'kind') collectStrayBraces(key, value, bad);
+    if (key !== 'exits' && key !== 'kind' && key !== 'note') collectStrayBraces(key, value, bad);
   }
   bad.sort();
   if (bad.length > 0) {

@@ -225,11 +225,19 @@ describe('conformance corpus — fill', () => {
       const read = (ext: string) => readFileSync(resolve(FILL_DIR, `${name}.${ext}`), 'utf8');
       const flow = decode(read('input.yaml'), name);
       const values = JSON.parse(read('values.json')) as Record<string, string>;
+      // Every source is a flow that passes the gate fill expects in front of it.
+      expect(validateOutbound(flow).filter((i) => i.severity === 'error')).toEqual([]);
       const result = fill(flow, values);
       if (existsSync(resolve(FILL_DIR, `${name}.expected.yaml`))) {
         if (!('flow' in result)) throw new Error(JSON.stringify(result.errors));
         const want = decode(read('expected.yaml'), name);
-        expect(serializeFlow(result.flow)).toBe(serializeFlow(want));
+        const text = serializeFlow(result.flow);
+        expect(text).toBe(serializeFlow(want));
+        // The result is a v3 document that validates on its own and
+        // reads back as itself.
+        expect(result.flow.schema_version).toBe(3);
+        expect(validateOutbound(result.flow).filter((i) => i.severity === 'error')).toEqual([]);
+        expect(serializeFlow(decode(text, name))).toBe(text);
       } else {
         const want = JSON.parse(read('expected.json')) as { errors: string[] };
         if (!('errors' in result)) throw new Error('expected fill to be refused');

@@ -3,6 +3,13 @@
 //! A template is text with `{{name}}` placeholders and `{{#name}}…{{/name}}`
 //! conditional blocks (kept only when the variable's value is non-empty).
 //! Blocks do not nest and have no else. Names are `[a-z][a-z0-9_]{0,31}`.
+//!
+//! [`fill`] gives each name an effective value: the caller's, cleaned, or
+//! the variable's default when the caller gives none or a blank one. So a
+//! blank value falls back to the default; it cannot clear a default. Only a
+//! menu option whose label is exactly a bare `{{name}}` is dropped when its
+//! effective value is empty; any other text that holds an empty placeholder
+//! is kept, with the placeholder filled as nothing.
 //! Twin: `packages/flow-schema/src/vars.ts`.
 
 use std::collections::BTreeMap;
@@ -149,6 +156,11 @@ pub enum FillError {
     TooLong { name: String, max: u64, len: u64 },
     #[error("filling leaves menu {node:?} with no options")]
     NoOptions { node: String },
+    #[error(
+        "filling makes a prompt of node {node:?} longer than {} characters",
+        crate::validate::MAX_PROMPT_CHARS
+    )]
+    PromptTooLong { node: String },
 }
 
 impl FillError {
@@ -158,6 +170,7 @@ impl FillError {
             FillError::Unknown(_) => "variable_unknown",
             FillError::TooLong { .. } => "variable_too_long",
             FillError::NoOptions { .. } => "menu_without_options",
+            FillError::PromptTooLong { .. } => "prompt_too_long",
         }
     }
 }
@@ -188,26 +201,30 @@ fn render(segments: &[Segment<'_>], effective: &dyn Fn(&str) -> String, out: &mu
 }
 
 /// Turn a flow with variables plus a caller's values into a plain flow the
-/// engine can run: every placeholder replaced, `variables` gone,
-/// `schema_version` unchanged. Twin: `vars.ts` `fill`.
+/// engine can run: every placeholder replaced, `variables` and every audio
+/// prompt's `template` gone, and a declared `schema_version` of 4 or more
+/// set to 3. Twin: `vars.ts` `fill`.
 ///
 /// A name's effective value is the caller's (trimmed, control characters
-/// stripped) when that is non-empty, else the variable's default. Values are
-/// inserted as text and never parsed again. A menu option whose label is
-/// exactly `{{name}}` with an empty value is removed, with its exit. An audio
-/// prompt with a `template` stays audio (dropping the template) unless a
-/// variable it names got a non-default value; then it becomes the filled
-/// text. A flow without variables comes back as a clone. A malformed template
-/// is left as written (validation rejects those before fill is reached).
+/// stripped) when that is non-empty, else the variable's default; so a blank
+/// value falls back to the default and cannot clear it. Values are inserted
+/// as text and never parsed again. A menu option whose label is exactly a
+/// bare `{{name}}` with an empty effective value is removed, with its exit;
+/// any other label is filled and kept. An audio prompt with a `template`
+/// stays audio (dropping the template) unless a variable it names got a
+/// non-default value; then it becomes the filled text. A v1-v3 flow without
+/// variables comes back as a clone. A malformed template is left as written
+/// (validation rejects those before fill is reached).
 ///
-/// Contract: validate the source flow first (`validate_outbound`); the result
-/// is not meant to be re-validated (a value may itself hold `{{`). `fill`
-/// keeps options and exits consistent on its own. Errors: `variable_unknown`,
-/// `variable_too_long`, and `menu_without_options` when every option of a menu
-/// would be dropped.
+/// Contract: validate the source flow first (`validate_outbound`). The result
+/// is a v3 document that validates on its own: a value holding `{{` is plain
+/// text in v3, and `fill` keeps options and exits consistent. Errors:
+/// `variable_unknown`, `variable_too_long`, `menu_without_options` when every
+/// option of a menu would be dropped, and `prompt_too_long` when a filled
+/// prompt is longer than validation allows.
 pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<FillError>> {
-    // No variables: `{{` is ordinary text (v1-v3), so there is nothing to fill.
-    if flow.variables.is_empty() && values.is_empty() {
+    // No variables before v4: `{{` is ordinary text, so there is nothing to fill.
+    if flow.variables.is_empty() && values.is_empty() && flow.schema_version < 4 {
         return Ok(flow.clone());
     }
     let mut errors = Vec::new();
@@ -252,7 +269,12 @@ pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<
 
     let mut out = flow.clone();
     out.variables.clear();
+    // Variables and templates are gone, so what is left is a v3 document.
+    if out.schema_version >= 4 {
+        out.schema_version = 3;
+    }
     for (node_id, node) in out.nodes.iter_mut() {
+        let mut too_long = false;
         for (_, prompt) in node.prompt_slots_mut() {
             match prompt {
                 Prompt::Text(text) => *text = fill_text(text),
@@ -268,6 +290,14 @@ pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<
                     }
                 }
             }
+            if let Prompt::Text(text) = prompt {
+                too_long |= text.chars().count() > crate::validate::MAX_PROMPT_CHARS;
+            }
+        }
+        if too_long {
+            errors.push(FillError::PromptTooLong {
+                node: node_id.clone(),
+            });
         }
         if let Node::Menu { options, exits, .. } = node {
             let mut dropped = Vec::new();
@@ -458,7 +488,7 @@ mod tests {
         );
         assert!(!exits.contains(&"3".to_string()) && !exits.contains(&"4".to_string()));
         assert!(filled.variables.is_empty());
-        assert_eq!(filled.schema_version, 4);
+        assert_eq!(filled.schema_version, 3);
     }
 
     #[test]
@@ -571,6 +601,60 @@ mod tests {
         crate::validate::validate_outbound(&ask()).unwrap();
         let filled = fill(&ask(), &vals(&[("question", "{{option1}} {x}")])).unwrap();
         assert!(menu(&filled).0.contains("{{option1}} {x}"));
+    }
+
+    #[test]
+    fn filled_flow_with_braces_in_a_value_validates_as_v3() {
+        let filled = fill(&ask(), &vals(&[("question", "Is {{x}} {{#y}} ok?")])).unwrap();
+        assert_eq!(filled.schema_version, 3);
+        assert!(menu(&filled).0.contains("Is {{x}} {{#y}} ok?"));
+        crate::validate::validate_outbound(&filled).unwrap();
+        // And it reads back as itself: in v3 the braces are plain text.
+        let text = filled.to_yaml();
+        let back = Flow::from_yaml(&text).unwrap();
+        assert_eq!(back.to_yaml(), text);
+        crate::validate::validate_outbound(&back).unwrap();
+    }
+
+    #[test]
+    fn a_v4_flow_without_variables_still_comes_back_as_v3() {
+        let flow = Flow::from_yaml(
+            "schema_version: 4\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hangup\n    prompt: { audio: vprompt_a, template: Hello }\n",
+        )
+        .unwrap();
+        crate::validate::validate_outbound(&flow).unwrap();
+        let filled = fill(&flow, &BTreeMap::new()).unwrap();
+        assert_eq!(filled.schema_version, 3);
+        assert!(matches!(
+            &filled.nodes["a"],
+            Node::Hangup {
+                prompt: Some(Prompt::Audio { template: None, .. }),
+                ..
+            }
+        ));
+        crate::validate::validate_outbound(&filled).unwrap();
+    }
+
+    #[test]
+    fn a_filled_prompt_over_the_limit_is_an_error() {
+        let flow = Flow::from_yaml(
+            "schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  d: { default: \"\", max_len: 500 }\nnodes:\n  a:\n    kind: hangup\n    prompt: \"{{d}}{{d}}{{d}}{{d}}\"\n",
+        )
+        .unwrap();
+        // 4 x 500 = 2000: exactly the limit is fine.
+        assert!(fill(&flow, &vals(&[("d", &"问".repeat(500))])).is_ok());
+        let mut over = flow.clone();
+        let Node::Hangup {
+            prompt: Some(Prompt::Text(t)),
+            ..
+        } = &mut over.nodes["a"]
+        else {
+            unreachable!()
+        };
+        t.push('!');
+        let errs = fill(&over, &vals(&[("d", &"问".repeat(500))])).unwrap_err();
+        assert_eq!(errs, vec![FillError::PromptTooLong { node: "a".into() }]);
+        assert_eq!(errs[0].code(), "prompt_too_long");
     }
 
     #[test]

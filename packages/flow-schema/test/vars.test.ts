@@ -131,6 +131,24 @@ describe('placeholders in a flow', () => {
     );
   });
 
+  it('refuses a default longer than its max_len, counted in characters', () => {
+    const body = HANGUP('"{{q}}"');
+    expect(errorCodes(flow(4, 'variables:\n  q: { default: "问问问", max_len: 2 }\n', body))).toEqual(
+      ['variable_default_too_long'],
+    );
+    expect(errorCodes(flow(4, 'variables:\n  q: { default: "问问", max_len: 2 }\n', body))).toEqual(
+      [],
+    );
+  });
+
+  it('never scans a note, on the flow or on a step', () => {
+    const src =
+      'schema_version: 4\nid: f\nname: F\nnote: "{{ghost}} {{#x"\nentry: a\n' +
+      Q +
+      'nodes:\n  a:\n    kind: hangup\n    note: "{{ghost}} {{#x"\n    prompt: "{{q}}"\n';
+    expect(errorCodes(src)).toEqual([]);
+  });
+
   it('refuses placeholders in a transfer target and a transcript', () => {
     expect(errorCodes(flow(4, Q, '  a:\n    kind: transfer\n    target: "{{q}}"\n'))).toEqual([
       'placeholder_not_allowed',
@@ -212,7 +230,7 @@ describe('fill', () => {
     expect(menu.exits).not.toHaveProperty('3');
     expect(menu.exits).not.toHaveProperty('4');
     expect(flow.variables).toBeUndefined();
-    expect(flow.schema_version).toBe(4);
+    expect(flow.schema_version).toBe(3);
   });
 
   it('keeps_option3_when_given', () => {
@@ -283,6 +301,43 @@ describe('fill', () => {
     expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
     const menu = askMenu(filled(ask(), { question: '{{option1}} {x}' }));
     expect(menu.prompt as string).toContain('{{option1}} {x}');
+  });
+
+  it('filled flow with braces in a value validates as v3', () => {
+    const flow = filled(ask(), { question: 'Is {{x}} {{#y}} ok?' });
+    expect(flow.schema_version).toBe(3);
+    expect(askMenu(flow).prompt as string).toContain('Is {{x}} {{#y}} ok?');
+    expect(validateOutbound(flow).filter((i) => i.severity === 'error')).toEqual([]);
+    // And it reads back as itself: in v3 the braces are plain text.
+    const text = serializeFlow(flow);
+    const back = load(text);
+    expect(serializeFlow(back)).toBe(text);
+    expect(validateOutbound(back).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('a v4 flow without variables still comes back as v3', () => {
+    const flow = load(
+      'schema_version: 4\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hangup\n    prompt: { audio: vprompt_a, template: Hello }\n',
+    );
+    expect(validateOutbound(flow).filter((i) => i.severity === 'error')).toEqual([]);
+    const out = filled(flow, {});
+    expect(out.schema_version).toBe(3);
+    expect(out.nodes.a).toMatchObject({ prompt: { audio: 'vprompt_a' } });
+    expect(out.nodes.a).not.toHaveProperty('prompt.template');
+    expect(validateOutbound(out).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('a filled prompt over the limit is an error', () => {
+    const src = (prompt: string) =>
+      load(
+        `schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  d: { default: "", max_len: 500 }\nnodes:\n  a:\n    kind: hangup\n    prompt: "${prompt}"\n`,
+      );
+    // 4 x 500 = 2000: exactly the limit is fine; counted in characters.
+    const value = { d: '😀'.repeat(500) };
+    expect('flow' in fill(src('{{d}}{{d}}{{d}}{{d}}'), value)).toBe(true);
+    expect(fill(src('{{d}}{{d}}{{d}}{{d}}!'), value)).toEqual({
+      errors: [{ code: 'prompt_too_long', name: 'a' }],
+    });
   });
 
   it('dropping_every_option_is_an_error', () => {

@@ -1,0 +1,10 @@
+schema_version: 4
+id: flow_default_too_long
+name: Default longer than its limit
+entry: bye
+variables:
+  question: { description: The question, default: "Is this too long?", max_len: 10 }
+nodes:
+  bye:
+    kind: hangup
+    prompt: "{{question}}"

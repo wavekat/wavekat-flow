@@ -168,3 +168,33 @@ fn old_reader_refuses_a_screened_transfer_rather_than_run_it_blind() {
         wavekat_flow::validate::validate(&wavekat_flow::Flow::from_yaml(&yaml).unwrap()).is_ok()
     );
 }
+
+#[test]
+fn old_reader_refuses_a_flow_with_variables_rather_than_speak_the_braces() {
+    // `variables` is what gives a `{{name}}` placeholder its meaning. A
+    // reader that does not know it would speak the braces as written, so
+    // the document declares version 4 and the old reader must refuse it
+    // with an error. A panic would take the daemon down with it, so every
+    // v4 document is read inside `catch_unwind`.
+    for name in [
+        "ask-question",
+        "rendered-template-prompt",
+        "placeholder-in-note",
+    ] {
+        let yaml = fs::read_to_string(corpus().join(format!("v4/valid/{name}.yaml"))).unwrap();
+        assert!(
+            !old_flow::SUPPORTED_SCHEMA_VERSIONS.contains(&schema_version(&yaml)),
+            "{OLDEST_READER} claims to read version 4"
+        );
+        let refused = std::panic::catch_unwind(|| match old_flow::Flow::from_yaml(&yaml) {
+            Err(_) => true,
+            Ok(old) => old_validate(&old).is_err(),
+        })
+        .unwrap_or_else(|_| panic!("{OLDEST_READER} panicked on v4/valid/{name}"));
+        assert!(refused, "{OLDEST_READER} accepted v4/valid/{name}");
+        assert!(
+            wavekat_flow::validate::validate(&wavekat_flow::Flow::from_yaml(&yaml).unwrap())
+                .is_ok()
+        );
+    }
+}

@@ -40,7 +40,7 @@ export interface Flow {
    */
   note?: string;
   /**
-   * Details a caller of this flow fills in per call, declared by name (a lowercase letter, then up to 31 lowercase letters, digits or underscores; the validators check the form, not the schema, so a reader never has to compile a pattern). Prompts and menu labels refer to them with `{{name}}` placeholders (read and checked from a later step; to this version of the schema they are plain text). Needs schema_version 4: a reader that ignored the map would speak the placeholders as written.
+   * Details a caller of this flow fills in per call, declared by name (a lowercase letter, then up to 31 lowercase letters, digits or underscores; the validators check the form, not the schema, so a reader never has to compile a pattern). A text prompt, an audio prompt's `template` and a menu option label refer to them with `{{name}}` placeholders and `{{#name}}…{{/name}}` blocks (the block's text is kept only when the value is non-empty; blocks do not nest). The validators check that every placeholder is well formed and names a declared variable, and refuse `{{` in any other field; a `note` is a comment and is never scanned. Before a call runs, the flow is filled: each placeholder becomes the call's value, or the default when the call gives none or a blank one, and the result is a schema_version 3 document with no variables. Needs schema_version 4: a reader that ignored the map would speak the placeholders as written.
    */
   variables?: {
     [k: string]: Variable;
@@ -180,7 +180,7 @@ export interface MenuNode {
   note?: string;
   prompt: Prompt;
   /**
-   * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator.
+   * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator. A label may hold placeholders; one that is exactly a bare `{{name}}` whose filled value is empty removes the option, and its exit, from the call.
    */
   options: {
     [k: string]: string;

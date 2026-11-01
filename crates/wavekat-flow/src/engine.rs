@@ -28,6 +28,7 @@ use crate::book;
 use crate::hours::{self, HoursError};
 use crate::model::{Flow, HoursException, MessageTone, Node, Prompt, WeeklySchedule};
 use crate::trace::{FlowOutcome, StepDetail, Trace};
+use crate::vars::{self, FillError};
 use crate::NodeId;
 
 /// Backstop against a cycle in a flow that somehow reached the engine
@@ -245,6 +246,8 @@ enum EngineError {
     MissingExit { node: NodeId, exit: String },
     #[error("hours evaluation at {node:?} failed: {source}")]
     Hours { node: NodeId, source: HoursError },
+    #[error("the flow's variables could not be filled with their defaults: {}", .0.iter().map(|e| format!("{} ({e})", e.code())).collect::<Vec<_>>().join(", "))]
+    Fill(Vec<FillError>),
 }
 
 impl EngineError {
@@ -277,7 +280,25 @@ enum Step {
 /// caller hangs up mid-flow — still holds the steps executed so far. A
 /// cancelled run never writes `outcome`; it keeps the [`FlowOutcome::Defect`]
 /// placeholder.
+///
+/// A flow that still declares `variables` is never run as written: it is
+/// first filled with its defaults ([`vars::fill`] with no values), so the
+/// caller never hears a placeholder. Fill the flow yourself to run it with a
+/// call's values. A flow that cannot be filled ends as a defect before any
+/// node runs.
 pub async fn run<E: FlowEffects>(flow: &Flow, fx: &mut E, trace: &mut Trace) {
+    let filled;
+    let flow = if flow.variables.is_empty() {
+        flow
+    } else {
+        match vars::fill(flow, &std::collections::BTreeMap::new()) {
+            Ok(f) => {
+                filled = f;
+                &filled
+            }
+            Err(errs) => return abort(trace, EngineError::Fill(errs)),
+        }
+    };
     let mut current = flow.entry.clone();
 
     for _ in 0..MAX_STEPS {
@@ -1099,6 +1120,65 @@ nodes:
         );
         let json = serde_json::to_value(&trace.steps[2].detail).unwrap();
         assert_eq!(json["label"], "Hours");
+    }
+
+    const ASK: &str = include_str!("../../../conformance/v4/valid/ask-question.yaml");
+
+    #[tokio::test]
+    async fn an_unfilled_flow_runs_with_its_defaults() {
+        // Handed the v4 flow as written, not a filled one: the engine fills
+        // it with the defaults rather than speak the braces.
+        let flow = Flow::from_yaml(ASK).unwrap();
+        let mut fx = MockEffects::new(open_time()).digits([Some(Digit::D1)]);
+        let trace = run_trace(&flow, &mut fx).await;
+        assert_eq!(trace.outcome, FlowOutcome::HungUp);
+        assert_eq!(
+            trace.steps[0].detail,
+            StepDetail::MenuChoice {
+                digit: "1".into(),
+                label: Some("Yes".into())
+            }
+        );
+        assert!(fx.spoken[0].contains("Press 1 for Yes."), "{:?}", fx.spoken);
+        assert!(
+            fx.spoken.iter().all(|s| !s.contains("{{")),
+            "{:?}",
+            fx.spoken
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unfilled_flow_drops_an_empty_option() {
+        // option3's default is empty, so key 3 is not an option: every press
+        // is invalid (retries: 2, so three tries) and the call ends at `bye`.
+        let flow = Flow::from_yaml(ASK).unwrap();
+        let mut fx = MockEffects::new(open_time()).digits([
+            Some(Digit::D3),
+            Some(Digit::D3),
+            Some(Digit::D3),
+        ]);
+        let trace = run_trace(&flow, &mut fx).await;
+        assert_eq!(trace.steps[0].detail, StepDetail::MenuInvalid);
+        assert_eq!(trace.outcome, FlowOutcome::HungUp);
+        assert!(fx.spoken.iter().any(|s| s.contains("No answer recorded")));
+    }
+
+    #[tokio::test]
+    async fn a_flow_that_cannot_be_filled_is_a_defect() {
+        let flow = Flow::from_yaml(
+            "schema_version: 4\nid: f\nname: F\nentry: m\nvariables:\n  a: { default: \"\" }\nnodes:\n  m:\n    kind: menu\n    prompt: Pick\n    options: { \"1\": \"{{a}}\" }\n    exits: { \"1\": m, no_input: m, invalid: m }\n",
+        )
+        .unwrap();
+        let mut fx = MockEffects::new(open_time());
+        let trace = run_trace(&flow, &mut fx).await;
+        assert_eq!(trace.outcome, FlowOutcome::Defect);
+        assert!(trace.steps.is_empty());
+        assert!(fx.spoken.is_empty());
+        assert!(trace
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("menu_without_options"));
     }
 
     #[test]

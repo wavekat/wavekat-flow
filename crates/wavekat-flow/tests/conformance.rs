@@ -303,12 +303,26 @@ fn corpus_fill_matches_expectations() {
             &fs::read_to_string(dir.join(format!("{case}.values.json"))).unwrap(),
         )
         .unwrap();
+        // Every source is a flow that passes the gate fill expects in front of it.
+        wavekat_flow::validate::validate_outbound(&flow)
+            .unwrap_or_else(|e| panic!("fill/{case} source should validate: {e:?}"));
         let result = wavekat_flow::vars::fill(&flow, &values);
         let expected_yaml = dir.join(format!("{case}.expected.yaml"));
         if expected_yaml.exists() {
             let filled = result.unwrap_or_else(|e| panic!("fill/{case} should succeed: {e:?}"));
             let want = Flow::from_yaml(&fs::read_to_string(expected_yaml).unwrap()).unwrap();
-            assert_eq!(filled.to_yaml(), want.to_yaml(), "fill/{case}");
+            let text = filled.to_yaml();
+            assert_eq!(text, want.to_yaml(), "fill/{case}");
+            // The result is a v3 document that validates on its own and
+            // reads back as itself.
+            assert_eq!(filled.schema_version, 3, "fill/{case}");
+            wavekat_flow::validate::validate_outbound(&filled)
+                .unwrap_or_else(|e| panic!("fill/{case} result should validate: {e:?}"));
+            assert_eq!(
+                Flow::from_yaml(&text).unwrap().to_yaml(),
+                text,
+                "fill/{case}"
+            );
         } else {
             #[derive(serde::Deserialize)]
             struct Refusal {

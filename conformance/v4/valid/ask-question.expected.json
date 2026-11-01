@@ -1,5 +1,5 @@
 {
-  "description": "Flow variables: a top-level `variables` map declares details filled per call. The `{{name}}` placeholders in the prompt and menu labels are plain text to this version of the format; they are read and checked by a later step, so here they only have to be accepted. The 9 key loops back to the same menu, which waits for a key and so is not an unbounded loop.",
+  "description": "Flow variables: a top-level `variables` map declares details filled per call. The prompt and menu labels use `{{name}}` placeholders and `{{#name}}…{{/name}}` blocks, and each one names a declared variable, so the flow is accepted. The empty defaults of option3 and option4 make those keys optional: filled with no values, their blocks are dropped from the prompt and their bare `{{option3}}`/`{{option4}}` labels remove the options and their exits. The 9 key loops back to the same menu, which waits for a key and so is not an unbounded loop.",
   "structurallyValid": true,
   "semantic": { "ok": true, "errors": [] }
 }
