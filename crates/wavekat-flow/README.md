@@ -32,7 +32,8 @@ this crate.
 | `edit` | Load a document to edit it: `edit::load` refuses unknown fields (a save would delete them) and unsupported versions, and returns the YAML comments a save drops; `edit::load_draft` fills a new draft's missing `id`/`name` |
 | `Flow::to_yaml` | The canonical text of a flow, byte for byte what the TypeScript `serializeFlow` writes. Edit by parsing, changing the flow, and calling this |
 | `hours` | Business-hours / timezone math (IANA zones, holiday exceptions) |
-| `engine` | The flow interpreter + the `FlowEffects` async trait your runtime implements |
+| `vars` | Flow variables (v4): the `{{name}}` / `{{#name}}…{{/name}}` placeholder syntax, and `vars::fill`, which turns a flow plus a call's values into a plain v3 flow that validates on its own |
+| `engine` | The flow interpreter + the `FlowEffects` async trait your runtime implements; a flow that still declares variables is filled with its defaults before it runs |
 | `trace` | Serializable run traces emitted by the engine |
 | `FLOW_V1_SCHEMA` | The normative JSON Schema, bundled as a string for structural validation |
 

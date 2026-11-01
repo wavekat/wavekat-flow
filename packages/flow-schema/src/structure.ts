@@ -18,7 +18,7 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 
-import { flowV1Schema, flowV2Schema, flowV3Schema } from './generated/schema.js';
+import { flowV1Schema, flowV2Schema, flowV3Schema, flowV4Schema } from './generated/schema.js';
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 
@@ -33,6 +33,7 @@ const validators = new Map<number, ValidateFunction>([
   [1, ajv.compile(flowV1Schema)],
   [2, ajv.compile(flowV2Schema)],
   [3, ajv.compile(flowV3Schema)],
+  [4, ajv.compile(flowV4Schema)],
 ]);
 
 export type StructuralResult =

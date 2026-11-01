@@ -27,6 +27,7 @@ export type {
   RingNode,
   TimeRange,
   TransferNode,
+  Variable,
   WeeklySchedule,
 } from './generated/model.js';
 
@@ -52,13 +53,13 @@ export type Component = Node;
 
 /** Schema versions this validator understands. Twin: `lib.rs`
  * `SUPPORTED_SCHEMA_VERSIONS`. */
-export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3];
+export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3, 4];
 
 /** The newest version this build authors — what a new document should
  * declare. Reading stays broad ({@link SUPPORTED_SCHEMA_VERSIONS});
  * writing is deliberately one number. Twin: `lib.rs`
  * `CURRENT_SCHEMA_VERSION`. */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** The shortest and longest a screened transfer may ring the person's
  * phone, in seconds. Twin: `validate.rs` `MIN_TRANSFER_TIMEOUT_SECS` /
@@ -69,6 +70,17 @@ export const MAX_TRANSFER_TIMEOUT_SECS = 120;
 /** The oldest `schema_version` that may put `whisper` or `timeout_secs` on
  * a `transfer`. Twin: `validate.rs` `TRANSFER_FIELDS_MIN_SCHEMA_VERSION`. */
 export const TRANSFER_FIELDS_MIN_SCHEMA_VERSION = 3;
+
+/** The oldest `schema_version` that may declare `variables`. Twin:
+ * `validate.rs` `VARIABLES_MIN_SCHEMA_VERSION`. */
+export const VARIABLES_MIN_SCHEMA_VERSION = 4;
+
+/** The longest a variable's `max_len` may be, in characters. The schema
+ * carries the same cap. Twin: `validate.rs` `MAX_VARIABLE_LEN`. */
+export const MAX_VARIABLE_LEN = 500;
+
+/** A variable's `max_len` when it gives none; the schema's default. */
+export const DEFAULT_VARIABLE_MAX_LEN = 200;
 
 /** Longest a spoken (text) prompt may be — see `validate.ts`. Twin:
  * `validate.rs` `MAX_PROMPT_CHARS`. */
@@ -133,6 +145,15 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
   book: 2,
 };
 
+/** The oldest `schema_version` that may give an audio prompt a `template`.
+ * Twin: `validate.rs` `TEMPLATE_MIN_SCHEMA_VERSION`. */
+export const TEMPLATE_MIN_SCHEMA_VERSION = 4;
+
+/** An empty `variables` map declares nothing, so it is the same as none. */
+export function hasVariables(flow: Flow): boolean {
+  return flow.variables !== undefined && Object.keys(flow.variables).length > 0;
+}
+
 /**
  * The lowest `schema_version` that can carry this document's components —
  * the version it *needs*, as against the one it declares.
@@ -152,9 +173,11 @@ export const KIND_MIN_SCHEMA_VERSION: Record<ComponentKind, number> = {
 export function requiredSchemaVersion(flow: Flow): number {
   return Math.max(
     1,
+    hasVariables(flow) ? VARIABLES_MIN_SCHEMA_VERSION : 1,
     ...Object.values(flow.nodes).map((node) =>
       Math.max(
         KIND_MIN_SCHEMA_VERSION[node.kind],
+        nodePrompts(node).some((p) => promptTemplate(p) !== null) ? TEMPLATE_MIN_SCHEMA_VERSION : 1,
         node.kind === 'transfer' && (node.whisper !== undefined || node.timeout_secs !== undefined)
           ? TRANSFER_FIELDS_MIN_SCHEMA_VERSION
           : 1,
@@ -276,6 +299,16 @@ export function promptTranscript(prompt: Prompt): string | null {
 }
 
 /**
+ * The `{{name}}` text an audio prompt was voiced from with its variables'
+ * defaults, `null` for a text prompt or a plain clip. Not scanned here.
+ * Twin: `model_ext.rs` `Prompt::template`.
+ */
+export function promptTemplate(prompt: Prompt): string | null {
+  if (typeof prompt === 'string') return null;
+  return typeof prompt.template === 'string' ? prompt.template : null;
+}
+
+/**
  * A generated-clip ref is a `voice_prompts` id (`vprompt_<hex>`) — a clip the
  * platform produced and owns. Anything else in an `audio:` field is a ref the
  * platform does *not* own. Single source of truth for "a ref the platform
@@ -302,6 +335,27 @@ export function nodePrompts(node: Node): Prompt[] {
       return [node.prompt, node.confirm_prompt];
     case 'transfer':
       return node.whisper === undefined ? [] : [node.whisper];
+    default:
+      return [];
+  }
+}
+
+/** The prompt slots of a node with the field each comes from. */
+export function nodePromptSlots(node: Node): [string, Prompt][] {
+  switch (node.kind) {
+    case 'greeting':
+    case 'menu':
+    case 'message':
+      return [['prompt', node.prompt]];
+    case 'hangup':
+      return node.prompt === undefined ? [] : [['prompt', node.prompt]];
+    case 'book':
+      return [
+        ['prompt', node.prompt],
+        ['confirm_prompt', node.confirm_prompt],
+      ];
+    case 'transfer':
+      return node.whisper === undefined ? [] : [['whisper', node.whisper]];
     default:
       return [];
   }

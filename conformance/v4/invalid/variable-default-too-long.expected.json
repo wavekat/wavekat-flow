@@ -1,0 +1,5 @@
+{
+  "description": "A variable's `default` is held to its own `max_len`, counted in characters like a caller's value. A default that would itself be refused as a value is refused when the flow is checked, not first noticed on a call.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["variable_default_too_long"] }
+}

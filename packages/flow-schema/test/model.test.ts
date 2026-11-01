@@ -47,6 +47,26 @@ nodes:
 `;
 
 describe('requiredSchemaVersion', () => {
+  it('is 4 for an audio prompt that keeps a template', () => {
+    const flow = parsed(V1_ONLY);
+    const bye = flow.nodes.bye;
+    if (bye?.kind !== 'hangup') throw new Error('fixture');
+    bye.prompt = { audio: 'vprompt_abc123', template: 'Hi {{name}}' };
+    expect(requiredSchemaVersion(flow)).toBe(4);
+    bye.prompt = { audio: 'vprompt_abc123' };
+    expect(requiredSchemaVersion(flow)).toBe(1);
+  });
+
+  it('is 4 once the document declares variables, and 1 when the map is empty', () => {
+    const flow = parsed(V1_ONLY);
+    flow.variables = { q: { default: 'hi' } };
+    expect(requiredSchemaVersion(flow)).toBe(4);
+    flow.variables = {};
+    expect(requiredSchemaVersion(flow)).toBe(1);
+    delete flow.variables;
+    expect(requiredSchemaVersion(flow)).toBe(1);
+  });
+
   it('is 1 for a document built only from components v1 had', () => {
     expect(requiredSchemaVersion(parsed(V1_ONLY))).toBe(1);
   });

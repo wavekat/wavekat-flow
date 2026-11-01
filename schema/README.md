@@ -10,6 +10,7 @@ version it declares, and no other.
 | `flow.v1.schema.json` | `schema_version: 1` | the original seven components |
 | `flow.v2.schema.json` | `schema_version: 2` | `book` — appointment booking over the phone |
 | `flow.v3.schema.json` | `schema_version: 3` | `transfer` gains `whisper` and `timeout_secs` — a screened transfer |
+| `flow.v4.schema.json` | `schema_version: 4` | top-level `variables` (each with a required `default`) — details a caller fills in per call, used through `{{name}}` placeholders; an audio prompt may keep the `template` it was voiced from |
 
 Version 2 is version 1 plus one component: every v1 document is a valid v2
 document once its `schema_version` is bumped, and nothing else changed.
@@ -17,6 +18,15 @@ Version 3 is version 2 plus two optional fields on `transfer`: every v2
 document is a valid v3 document once its `schema_version` is bumped. The
 bump is for what the fields do, not for their shape. A reader that ignored
 `whisper` would hand the call over without calling the target first.
+Version 4 is version 3 plus an optional top-level field, `variables`, and an
+optional `template` on an audio prompt. Unlike the earlier bumps, `{{` now
+means something: in a v4 document every `{{name}}` in a prompt, a `template`
+or a menu label must be a well-formed placeholder naming a declared variable,
+and `{{` anywhere else (apart from a `note`) is refused. So a v3 document is a
+valid v4 document once bumped only if it holds no `{{`. The bump is again for
+what the fields do: a reader that ignored `variables` would speak the
+placeholders as written. Filling a v4 document with a call's values
+(`fill`) gives back a v3 document, which every v3 reader runs.
 
 Everything downstream is generated or checked against these files:
 
@@ -45,8 +55,10 @@ The schema owns **structure only**:
 - the field set and types of `Flow` and every node kind,
 - the `kind` discriminated union (`greeting`, `hours`, `menu`, `ring`,
   `message`, `transfer`, `hangup`, and `book` from v2),
-- enums (`MessageTone`), the `Prompt` = `string | { audio, transcript? }` shape
-  (`transcript` is the optional text an audio clip was synthesized from),
+- enums (`MessageTone`), the `Prompt` = `string | { audio, transcript?, template? }`
+  shape (`transcript` is the optional text an audio clip was synthesized from;
+  `template`, from v4, the text with placeholders it was voiced from),
+- the `variables` map and each variable's `default` and `max_len` (v4),
 - required vs. optional fields and their defaults,
 - `schema_version` pinned to that file's version (a document declaring another
   version does not validate against it — it validates against that version's
@@ -66,6 +78,7 @@ validator and are pinned by the shared `conformance/` corpus:
 | `book` numeric bounds, and whether its schedule leaves room for one appointment | arithmetic over the node's own schedule |
 | Which components a `schema_version` may carry | a rule *about* versions, not expressible inside one |
 | Safe-subset YAML (reject anchors, aliases, tags, duplicate keys) | concrete-syntax concern; anchors don't survive parsing |
+| Placeholders (v4): well formed, naming a declared variable, only in a prompt, a `template` or a menu label; a default within its `max_len` | a parse of free text, checked against the flow's own `variables` |
 
 ## Unknown fields
 

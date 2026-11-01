@@ -1,0 +1,14 @@
+schema_version: 4
+id: flow_unknown_variable
+name: Placeholder with no variable
+entry: ask
+variables:
+  question: { description: The question, default: "Anything?", max_len: 100 }
+nodes:
+  ask:
+    kind: greeting
+    prompt: "{{question}} Also {{ghost}}."
+    exits: { next: bye }
+  bye:
+    kind: hangup
+    prompt: Goodbye.

@@ -1,0 +1,10 @@
+schema_version: 4
+id: flow_prompt_too_long
+name: A prompt that grows past the limit
+entry: say
+variables:
+  detail: { description: Read out five times, default: "", max_len: 500 }
+nodes:
+  say:
+    kind: hangup
+    prompt: "{{detail}} {{detail}} {{detail}} {{detail}} {{detail}}"

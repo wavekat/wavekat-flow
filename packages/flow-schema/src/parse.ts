@@ -24,6 +24,7 @@ import type {
   MessageTone,
   Prompt,
   TimeRange,
+  Variable,
   Weekday,
   WeeklySchedule,
 } from './model.js';
@@ -190,6 +191,43 @@ function warnUnknownFields(
   }
 }
 
+/** The `variables` map: each entry declares one value filled in per call. */
+function decodeVariables(
+  value: unknown,
+  issues: Issue[],
+): Record<string, Variable> | undefined {
+  if (!isMap(value)) {
+    error(issues, 'expected_map', '"variables" must be a mapping of variable names', value);
+    return undefined;
+  }
+  const out: Record<string, Variable> = {};
+  for (const [name, field] of fieldsOf(value, 'variables', issues)) {
+    const context = `variable "${name}"`;
+    if (!isMap(field.value)) {
+      error(issues, 'expected_map', `${context} must be a mapping`, field.value);
+      continue;
+    }
+    const entry = fieldsOf(field.value, context, issues);
+    warnUnknownFields(entry, ['description', 'default', 'max_len'], context, issues);
+    const dflt = required(entry, 'default', context, issues, field.value);
+    const defaultValue = dflt && asString(dflt.value, `${context} default`, issues);
+    if (defaultValue === undefined) continue;
+    const variable: Variable = { default: defaultValue };
+    const description = entry.get('description');
+    if (description) {
+      const v = asString(description.value, `${context} description`, issues);
+      if (v !== undefined) variable.description = v;
+    }
+    const maxLen = entry.get('max_len');
+    if (maxLen) {
+      const v = asU32(maxLen.value, `${context} max_len`, issues);
+      if (v !== undefined) variable.max_len = v;
+    }
+    out[name] = variable;
+  }
+  return out;
+}
+
 function decodePrompt(value: unknown, label: string, issues: Issue[]): Prompt | undefined {
   if (isScalar(value) && typeof value.value === 'string') return value.value;
   if (isMap(value)) {
@@ -197,15 +235,25 @@ function decodePrompt(value: unknown, label: string, issues: Issue[]): Prompt | 
     // `transcript` is the words the clip speaks, carried for display and
     // traces (model `Audio.transcript`); advisory only — playback still uses
     // `audio`. Known here so it neither warns nor gets dropped on decode.
-    warnUnknownFields(fields, ['audio', 'transcript'], label, issues);
+    warnUnknownFields(fields, ['audio', 'transcript', 'template'], label, issues);
     const audio = fields.get('audio');
     if (audio) {
       const ref = asString(audio.value, `${label} audio`, issues);
       if (ref === undefined) return undefined;
+      const out: { audio: string; transcript?: string; template?: string } = { audio: ref };
       const transcriptField = fields.get('transcript');
-      if (!transcriptField) return { audio: ref };
-      const transcript = asString(transcriptField.value, `${label} transcript`, issues);
-      return transcript === undefined ? undefined : { audio: ref, transcript };
+      if (transcriptField) {
+        const transcript = asString(transcriptField.value, `${label} transcript`, issues);
+        if (transcript === undefined) return undefined;
+        out.transcript = transcript;
+      }
+      const templateField = fields.get('template');
+      if (templateField) {
+        const template = asString(templateField.value, `${label} template`, issues);
+        if (template === undefined) return undefined;
+        out.template = template;
+      }
+      return out;
     }
   }
   error(issues, 'bad_prompt', `${label} must be text or { audio: ref }`, value);
@@ -640,7 +688,7 @@ export function parseFlow(source: string): ParseResult {
   const fields = fieldsOf(root, 'flow document', issues);
   warnUnknownFields(
     fields,
-    ['schema_version', 'id', 'name', 'version', 'note', 'entry', 'nodes', 'ui'],
+    ['schema_version', 'id', 'name', 'version', 'note', 'variables', 'entry', 'nodes', 'ui'],
     'flow document',
     issues,
   );
@@ -656,6 +704,8 @@ export function parseFlow(source: string): ParseResult {
   const version = versionField ? asU32(versionField.value, 'version', issues) : 1;
   const noteField = fields.get('note');
   const note = noteField ? asString(noteField.value, 'note', issues) : undefined;
+  const variablesField = fields.get('variables');
+  const variables = variablesField ? decodeVariables(variablesField.value, issues) : undefined;
   const entryField = required(fields, 'entry', 'flow document', issues, root);
   const entry = entryField && asString(entryField.value, 'entry', issues);
 
@@ -704,6 +754,9 @@ export function parseFlow(source: string): ParseResult {
       name,
       version,
       ...(note === undefined ? {} : { note }),
+      // An empty map declares nothing; drop it so it round-trips (the Rust
+      // twin skips an empty map when writing).
+      ...(variables === undefined || Object.keys(variables).length === 0 ? {} : { variables }),
       entry,
       nodes,
       ui: ui as Flow['ui'],

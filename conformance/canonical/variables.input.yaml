@@ -1,0 +1,12 @@
+# Variables, written out of order and with defaults spelled out.
+schema_version: 4
+name: Ask a question
+id: flow_vars_canon
+entry: ask
+variables:
+  question: { max_len: 300, default: Ready?, description: The question }
+  note_to_self: { max_len: 200, default: "" }
+nodes:
+  ask:
+    kind: hangup
+    prompt: "{{question}}"

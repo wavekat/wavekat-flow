@@ -1,0 +1,10 @@
+schema_version: 4
+name: Voiced with defaults
+id: flow_template_canon
+entry: ask
+variables:
+  name: { default: there }
+nodes:
+  ask:
+    kind: hangup
+    prompt: { template: "Hi {{name}}", transcript: Hi there, audio: vprompt_abc123 }

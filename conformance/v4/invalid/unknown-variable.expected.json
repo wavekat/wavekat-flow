@@ -1,0 +1,5 @@
+{
+  "description": "A `{{name}}` placeholder must name a variable the flow declares; otherwise the call would speak the braces or nothing. Unknown names are refused.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["unknown_variable"] }
+}
