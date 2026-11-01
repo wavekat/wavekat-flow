@@ -121,7 +121,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 name = "compat-old-readers"
 version = "0.0.1"
 dependencies = [
- "wavekat-flow 0.0.12",
+ "wavekat-flow 0.0.11",
  "wavekat-flow 0.0.6",
 ]
 
@@ -1562,7 +1562,7 @@ dependencies = [
 
 [[package]]
 name = "wavekat-flow"
-version = "0.0.6"
+version = "0.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa8de375720073be7590b3e3a0cb70ef88569bc483c3938d147d7a02c12408ca"
 dependencies = [
