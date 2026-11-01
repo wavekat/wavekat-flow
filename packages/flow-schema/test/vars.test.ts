@@ -340,6 +340,40 @@ describe('fill', () => {
     });
   });
 
+  it('prunes nodes only a dropped option reached', () => {
+    const flow = load(
+      [
+        'schema_version: 4',
+        'id: f',
+        'name: F',
+        'entry: m',
+        'variables:',
+        '  c: { default: "" }',
+        'nodes:',
+        '  m:',
+        '    kind: menu',
+        '    prompt: Pick',
+        '    options: { "1": One, "3": "{{c}}" }',
+        '    exits: { "1": end, "3": only3, no_input: end, invalid: end }',
+        '  only3:',
+        '    kind: greeting',
+        '    prompt: Three',
+        '    exits: { next: deeper }',
+        '  deeper:',
+        '    kind: hangup',
+        '  end:',
+        '    kind: hangup',
+        '',
+      ].join('\n'),
+    );
+    expect(validateOutbound(flow).filter((i) => i.severity === 'error')).toEqual([]);
+    const out = filled(flow, {});
+    expect(Object.keys(out.nodes)).toEqual(['m', 'end']);
+    expect(validateOutbound(out).filter((i) => i.severity === 'error')).toEqual([]);
+    // Given a value, key 3 and everything behind it stay.
+    expect(Object.keys(filled(flow, { c: 'Three' }).nodes)).toHaveLength(4);
+  });
+
   it('dropping_every_option_is_an_error', () => {
     const flow = load(
       [

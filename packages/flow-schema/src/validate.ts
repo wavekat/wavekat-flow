@@ -596,7 +596,7 @@ function checkGraph(
 
 /** Node ids reachable from `entry` over exit edges (`entry` included when
  * it exists). */
-function reachableFromEntry(flow: Flow): Set<string> {
+export function reachableFromEntry(flow: Flow): Set<string> {
   const reachable = new Set<string>();
   if (!(flow.entry in flow.nodes)) return reachable;
   reachable.add(flow.entry);

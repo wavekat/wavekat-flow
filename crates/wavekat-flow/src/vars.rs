@@ -210,7 +210,8 @@ fn render(segments: &[Segment<'_>], effective: &dyn Fn(&str) -> String, out: &mu
 /// value falls back to the default and cannot clear it. Values are inserted
 /// as text and never parsed again. A menu option whose label is exactly a
 /// bare `{{name}}` with an empty effective value is removed, with its exit;
-/// any other label is filled and kept. An audio prompt with a `template`
+/// any other label is filled and kept; a node left unreachable from `entry`
+/// once those exits are gone is removed too. An audio prompt with a `template`
 /// stays audio (dropping the template) unless a variable it names got a
 /// non-default value; then it becomes the filled text. A v1-v3 flow without
 /// variables comes back as a clone. A malformed template is left as written
@@ -326,11 +327,18 @@ pub fn fill(flow: &Flow, values: &BTreeMap<String, String>) -> Result<Flow, Vec<
             }
         }
     }
-    if errors.is_empty() {
-        Ok(out)
-    } else {
-        Err(errors)
+    if !errors.is_empty() {
+        return Err(errors);
     }
+    // A dropped option can leave the nodes only it led to unreachable; a
+    // caller could never get there, so they go too and the result still
+    // validates on its own.
+    let reachable: std::collections::BTreeSet<String> = crate::validate::reachable_from_entry(&out)
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    out.nodes.retain(|id, _| reachable.contains(id.as_str()));
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -655,6 +663,22 @@ mod tests {
         let errs = fill(&over, &vals(&[("d", &"问".repeat(500))])).unwrap_err();
         assert_eq!(errs, vec![FillError::PromptTooLong { node: "a".into() }]);
         assert_eq!(errs[0].code(), "prompt_too_long");
+    }
+
+    #[test]
+    fn nodes_only_a_dropped_option_reached_are_pruned() {
+        let flow = Flow::from_yaml(
+            "schema_version: 4\nid: f\nname: F\nentry: m\nvariables:\n  c: { default: \"\" }\nnodes:\n  m:\n    kind: menu\n    prompt: Pick\n    options: { \"1\": One, \"3\": \"{{c}}\" }\n    exits: { \"1\": end, \"3\": only3, no_input: end, invalid: end }\n  only3:\n    kind: greeting\n    prompt: Three\n    exits: { next: deeper }\n  deeper:\n    kind: hangup\n  end:\n    kind: hangup\n",
+        )
+        .unwrap();
+        crate::validate::validate_outbound(&flow).unwrap();
+        let filled = fill(&flow, &BTreeMap::new()).unwrap();
+        let ids: Vec<&str> = filled.nodes.keys().map(String::as_str).collect();
+        assert_eq!(ids, vec!["m", "end"]);
+        crate::validate::validate_outbound(&filled).unwrap();
+        // Given a value, key 3 and everything behind it stay.
+        let kept = fill(&flow, &vals(&[("c", "Three")])).unwrap();
+        assert_eq!(kept.nodes.len(), 4);
     }
 
     #[test]

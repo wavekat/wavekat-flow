@@ -14,6 +14,7 @@
 
 import type { Flow } from './model.js';
 import { DEFAULT_VARIABLE_MAX_LEN, MAX_PROMPT_CHARS, nodePromptSlots } from './model.js';
+import { reachableFromEntry } from './validate.js';
 
 /** One piece of a parsed template. A block's body holds only text and vars. */
 export type Segment =
@@ -150,7 +151,8 @@ function render(segments: Segment[], effective: (name: string) => string): strin
  * value falls back to the default and cannot clear it. Values are inserted as
  * text and never parsed again. A menu option whose label is exactly a bare
  * `{{name}}` with an empty effective value is removed, with its exit; any
- * other label is filled and kept. An audio prompt with a `template` stays
+ * other label is filled and kept; a node left unreachable from `entry` once
+ * those exits are gone is removed too. An audio prompt with a `template` stays
  * audio (dropping the template) unless a variable it names got a non-default
  * value; then it becomes the filled text. A v1-v3 flow without variables
  * comes back as a clone. A malformed template is left as written (validation
@@ -242,5 +244,13 @@ export function fill(
       }
     }
   }
-  return errors.length > 0 ? { errors } : { flow: out };
+  if (errors.length > 0) return { errors };
+  // A dropped option can leave the nodes only it led to unreachable; a caller
+  // could never get there, so they go too and the result still validates on
+  // its own.
+  const reachable = reachableFromEntry(out);
+  for (const id of Object.keys(out.nodes)) {
+    if (!reachable.has(id)) delete out.nodes[id];
+  }
+  return { flow: out };
 }

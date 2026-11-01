@@ -1,0 +1,18 @@
+schema_version: 4
+id: flow_dropped_path
+name: An option with its own ending
+entry: ask
+variables:
+  option3: { description: Answer for key 3, default: "", max_len: 80 }
+nodes:
+  ask:
+    kind: menu
+    prompt: "Press 1 for yes. Press 2 for no.{{#option3}} Press 3 for {{option3}}.{{/option3}}"
+    options: { "1": "Yes", "2": "No", "3": "{{option3}}" }
+    exits: { "1": thanks, "2": thanks, "3": only3, no_input: thanks, invalid: thanks }
+  only3:
+    kind: hangup
+    prompt: You picked the third answer. Goodbye.
+  thanks:
+    kind: hangup
+    prompt: Thanks. Goodbye.

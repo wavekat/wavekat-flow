@@ -712,7 +712,7 @@ fn unbounded_loop_nodes(flow: &Flow) -> Vec<&str> {
 
 /// Node ids reachable from `entry` over exit edges (`entry` included when
 /// it exists).
-fn reachable_from_entry(flow: &Flow) -> BTreeSet<&str> {
+pub(crate) fn reachable_from_entry(flow: &Flow) -> BTreeSet<&str> {
     let mut reachable: BTreeSet<&str> = BTreeSet::new();
     let Some((entry, _)) = flow.nodes.get_key_value(&flow.entry) else {
         return reachable;

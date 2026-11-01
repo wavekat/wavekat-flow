@@ -180,7 +180,7 @@ export interface MenuNode {
   note?: string;
   prompt: Prompt;
   /**
-   * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator. A label may hold placeholders; one that is exactly a bare `{{name}}` whose filled value is empty removes the option, and its exit, from the call.
+   * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator. A label may hold placeholders; one that is exactly a bare `{{name}}` whose filled value is empty removes the option, its exit, and any step only that exit led to, from the call.
    */
   options: {
     [k: string]: string;
