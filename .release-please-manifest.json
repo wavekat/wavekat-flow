@@ -1,5 +1,5 @@
 {
-  "packages/flow-schema": "0.0.15",
-  "crates/wavekat-flow": "0.0.12",
-  "crates/compat-old-readers": "0.0.1"
+  "packages/flow-schema": "0.0.16",
+  "crates/wavekat-flow": "0.0.13",
+  "crates/compat-old-readers": "0.0.2"
 }
