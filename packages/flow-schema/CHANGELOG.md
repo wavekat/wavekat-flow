@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.16](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.15...flow-schema-v0.0.16) (2026-11-02)
+
+
+### Features
+
+* add flow variables ([#59](https://github.com/wavekat/wavekat-flow/issues/59)) ([ff58aef](https://github.com/wavekat/wavekat-flow/commit/ff58aef275524b5c33f4411c689a4b6c6129530f))
+
 ## [0.0.15](https://github.com/wavekat/wavekat-flow/compare/flow-schema-v0.0.14...flow-schema-v0.0.15) (2026-10-31)
 
 
