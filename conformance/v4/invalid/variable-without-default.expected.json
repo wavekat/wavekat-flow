@@ -1,0 +1,5 @@
+{
+  "description": "Every variable declares a `default`, so a flow called with no values still plays. A variable without one is refused at the shape level; the default may be an empty string.",
+  "structurallyValid": false,
+  "semantic": { "ok": false, "errors": [] }
+}

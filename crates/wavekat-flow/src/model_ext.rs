@@ -274,6 +274,16 @@ impl Prompt {
             Prompt::Audio { transcript, .. } => transcript.as_deref(),
         }
     }
+
+    /// The `{{name}}` text an audio prompt was voiced from with its
+    /// variables' defaults, `None` for a text prompt or a plain clip. The
+    /// text itself is not scanned here. Twin: `model.ts` `promptTemplate`.
+    pub fn template(&self) -> Option<&str> {
+        match self {
+            Prompt::Text(_) => None,
+            Prompt::Audio { template, .. } => template.as_deref(),
+        }
+    }
 }
 
 impl Flow {
@@ -372,8 +382,23 @@ nodes:
         let audio = Prompt::Audio {
             audio: "vprompt_ab12cd34".into(),
             transcript: Some("open eleven to ten".into()),
+            template: None,
         };
         assert_eq!(audio.as_text(), None);
+    }
+
+    #[test]
+    fn template_is_only_on_an_audio_prompt() {
+        assert_eq!(Prompt::Text("Hi {{name}}".into()).template(), None);
+        let plain: Prompt = serde_yaml_ng::from_str("{ audio: vprompt_ff00ee11 }").unwrap();
+        assert_eq!(plain.template(), None);
+        let voiced: Prompt =
+            serde_yaml_ng::from_str("{ audio: vprompt_ff00ee11, template: \"Hi {{name}}\" }")
+                .unwrap();
+        assert_eq!(voiced.template(), Some("Hi {{name}}"));
+        let yaml = serde_yaml_ng::to_string(&voiced).unwrap();
+        let again: Prompt = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(again.template(), Some("Hi {{name}}"));
     }
 
     #[test]
@@ -386,6 +411,7 @@ nodes:
         let with_text = Prompt::Audio {
             audio: "vprompt_ab12cd34".into(),
             transcript: Some("open eleven to ten".into()),
+            template: None,
         };
         assert_eq!(with_text.transcript(), Some("open eleven to ten"));
 
@@ -393,6 +419,7 @@ nodes:
         let without_text = Prompt::Audio {
             audio: "vprompt_ff00ee11".into(),
             transcript: None,
+            template: None,
         };
         assert_eq!(without_text.transcript(), None);
     }

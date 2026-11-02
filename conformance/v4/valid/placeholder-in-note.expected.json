@@ -1,0 +1,5 @@
+{
+  "description": "A `note` is a comment for people and is never read by the engine, so it is never scanned for placeholders: a `{{q}}` there, declared or not, and even a malformed `{{#`, changes no verdict. This holds for the flow's top-level note and for every step's note.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

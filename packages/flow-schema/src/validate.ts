@@ -12,17 +12,25 @@
 // and menu/hours sanity caps. All problems are collected (not
 // fail-fast) so the editor can show every one at once.
 
-import type { BookNode, ComponentKind, Flow, Prompt, TransferNode } from './model.js';
+import type { BookNode, ComponentKind, Flow, Node, Prompt, TransferNode } from './model.js';
 import {
+  DEFAULT_VARIABLE_MAX_LEN,
   KIND_MIN_SCHEMA_VERSION,
   MAX_PROMPT_CHARS,
+  MAX_VARIABLE_LEN,
   MAX_TRANSFER_TIMEOUT_SECS,
   MIN_TRANSFER_TIMEOUT_SECS,
   SUPPORTED_SCHEMA_VERSIONS,
   TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
+  TEMPLATE_MIN_SCHEMA_VERSION,
+  VARIABLES_MIN_SCHEMA_VERSION,
+  hasVariables,
   VALID_DIGITS,
   isScreenedTransfer,
   isTerminal,
+  nodePromptSlots,
+  nodePrompts,
+  promptTemplate,
   promptText,
   requiredExits,
 } from './model.js';
@@ -41,6 +49,7 @@ import {
   parseBookVocabularyRef,
 } from './book.js';
 import type { Issue } from './issues.js';
+import { isVariableName, templateNames, tryParseTemplate } from './vars.js';
 import { validateHours } from './hours.js';
 
 type NodeRanges = Record<string, [number, number]>;
@@ -67,9 +76,31 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
     });
   }
 
+  // Flow-level, so it carries no node. Same code as a transfer field on an
+  // older document: the field needs a newer version than the one declared.
+  if (hasVariables(flow) && flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) {
+    issues.push({
+      severity: 'error',
+      code: 'field_requires_newer_schema',
+      message: `variables needs schema_version ${VARIABLES_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
+      params: {
+        field: 'variables',
+        required: VARIABLES_MIN_SCHEMA_VERSION,
+        declared: flow.schema_version,
+      },
+    });
+  }
+
+  const mentioned = new Set<string>();
+  checkVariables(flow, issues);
+
   const nodeIds = Object.keys(flow.nodes);
   if (nodeIds.length === 0) {
-    issues.push({ severity: 'error', code: 'empty_flow', message: 'flow has no nodes' });
+    issues.push({
+      severity: 'error',
+      code: 'empty_flow',
+      message: 'flow has no nodes',
+    });
     return issues; // graph checks below would be meaningless
   }
 
@@ -152,10 +183,12 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
       }
       case 'hours':
         issues.push(
-          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map((issue) => ({
-            ...issue,
-            range: nodeRanges[id],
-          })),
+          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map(
+            (issue) => ({
+              ...issue,
+              range: nodeRanges[id],
+            }),
+          ),
         );
         break;
       case 'transfer':
@@ -175,16 +208,35 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
         checkPrompt(id, node.prompt, issues, at);
         checkPrompt(id, node.confirm_prompt, issues, at);
         issues.push(
-          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map((issue) => ({
-            ...issue,
-            range: nodeRanges[id],
-          })),
+          ...validateHours(id, node.schedule, node.timezone, node.exceptions ?? []).map(
+            (issue) => ({
+              ...issue,
+              range: nodeRanges[id],
+            }),
+          ),
         );
         checkBookBounds(id, node, issues, at);
         break;
       case 'ring':
         break;
     }
+
+    if (
+      flow.schema_version < TEMPLATE_MIN_SCHEMA_VERSION &&
+      nodePrompts(node).some((p) => promptTemplate(p) !== null)
+    ) {
+      issues.push({
+        ...at(id),
+        code: 'field_requires_newer_schema',
+        message: `node "${id}" gives a prompt a template, which needs schema_version ${TEMPLATE_MIN_SCHEMA_VERSION} (this document declares ${flow.schema_version})`,
+        params: {
+          field: 'template',
+          required: TEMPLATE_MIN_SCHEMA_VERSION,
+          declared: flow.schema_version,
+        },
+      });
+    }
+    checkPlaceholders(id, node, flow, issues, at, mentioned);
 
     // A component the document's own version doesn't have. Checked per
     // node rather than once per flow so the editor points at the step
@@ -197,12 +249,30 @@ export function validateFlow(flow: Flow, nodeRanges: NodeRanges = {}): Issue[] {
         ...at(id),
         code: 'kind_requires_newer_schema',
         message: `node "${id}" is a ${node.kind} step, which needs schema_version ${minVersion} (this document declares ${flow.schema_version})`,
-        params: { kind: node.kind, required: minVersion, declared: flow.schema_version },
+        params: {
+          kind: node.kind,
+          required: minVersion,
+          declared: flow.schema_version,
+        },
       });
     }
   }
 
   // Reachability and trap analysis need a real entry to walk from.
+  // TS-only: a declared variable no placeholder mentions is dead weight.
+  if (flow.schema_version >= VARIABLES_MIN_SCHEMA_VERSION) {
+    for (const name of Object.keys(flow.variables ?? {})) {
+      if (!mentioned.has(name)) {
+        issues.push({
+          severity: 'warning',
+          code: 'unused_variable',
+          message: `variable "${name}" is declared but no prompt or menu label uses it`,
+          params: { name },
+        });
+      }
+    }
+  }
+
   if (entryExists) checkGraph(flow, issues, at);
 
   return issues;
@@ -250,7 +320,11 @@ function checkTransferFields(
         ...at(id),
         code: 'field_requires_newer_schema',
         message: `transfer node "${id}" sets ${field}, which needs schema_version ${TRANSFER_FIELDS_MIN_SCHEMA_VERSION} (this document declares ${declared})`,
-        params: { field, required: TRANSFER_FIELDS_MIN_SCHEMA_VERSION, declared },
+        params: {
+          field,
+          required: TRANSFER_FIELDS_MIN_SCHEMA_VERSION,
+          declared,
+        },
       });
     }
   }
@@ -299,6 +373,153 @@ function checkBookBounds(
       message: `book node "${id}" can never offer an appointment: no opening leaves room for ${node.duration_mins} minutes`,
       params: { duration: node.duration_mins },
     });
+  }
+}
+
+/** Declared variable names, `max_len`s and defaults, and placeholder-looking
+ * text in the flow's own `id` and `name` (its `note` is a comment and never
+ * scanned). Only on a v4 document: before that `{{` is ordinary text and
+ * `variables` is refused as a whole. Twin: `check_variables`. */
+function checkVariables(flow: Flow, issues: Issue[]): void {
+  if (flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) return;
+  for (const name of Object.keys(flow.variables ?? {}).sort()) {
+    if (!isVariableName(name)) {
+      issues.push({
+        severity: 'error',
+        code: 'variable_bad_name',
+        message: `variable name "${name}" must be a lowercase letter, then up to 31 lowercase letters, digits or underscores`,
+        params: { name },
+      });
+    }
+    const maxLen = flow.variables?.[name]?.max_len;
+    if (
+      maxLen !== undefined &&
+      (!Number.isInteger(maxLen) || maxLen < 1 || maxLen > MAX_VARIABLE_LEN)
+    ) {
+      issues.push({
+        severity: 'error',
+        code: 'variable_max_len_out_of_range',
+        message: `variable "${name}" max_len is ${maxLen} (allowed: 1-${MAX_VARIABLE_LEN})`,
+        params: { name, value: maxLen },
+      });
+    }
+    // A default is held to the same limit as a caller's value.
+    const max = maxLen ?? DEFAULT_VARIABLE_MAX_LEN;
+    const len = [...(flow.variables?.[name]?.default ?? '')].length;
+    if (len > max) {
+      issues.push({
+        severity: 'error',
+        code: 'variable_default_too_long',
+        message: `variable "${name}" default is ${len} characters; its max_len is ${max}`,
+        params: { name, max, len },
+      });
+    }
+  }
+  const fields = (['id', 'name'] as const).filter((k) => flow[k].includes('{{')).sort();
+  if (fields.length > 0) {
+    issues.push({
+      severity: 'error',
+      code: 'placeholder_not_allowed',
+      message: `${JSON.stringify(fields)} holds a {{ placeholder, which is only allowed in a prompt, a prompt template or a menu label`,
+      params: { fields },
+    });
+  }
+}
+
+/** Check every place a node may hold a placeholder (string prompts, an audio
+ * prompt's `template`, menu option labels) against the declared variables,
+ * and refuse `{{` in any other string field. A v1-v3 document is skipped:
+ * there `{{` is text to be spoken as written. Twin: `check_placeholders`. */
+function checkPlaceholders(
+  id: string,
+  node: Node,
+  flow: Flow,
+  issues: Issue[],
+  at: (node: string) => Pick<Issue, 'severity' | 'node' | 'range'>,
+  mentioned: Set<string>,
+): void {
+  if (flow.schema_version < VARIABLES_MIN_SCHEMA_VERSION) return;
+  const scan = (field: string, text: string) => {
+    const { error } = tryParseTemplate(text);
+    for (const name of templateNames(text)) mentioned.add(name);
+    if (error === null) {
+      for (const name of templateNames(text)) {
+        if (!Object.hasOwn(flow.variables ?? {}, name)) {
+          issues.push({
+            ...at(id),
+            code: 'unknown_variable',
+            message: `node "${id}" ${field} uses "${name}", which the flow does not declare under variables`,
+            params: { field, name },
+          });
+        }
+      }
+    } else if (error.kind === 'bad_name') {
+      issues.push({
+        ...at(id),
+        code: 'variable_bad_name',
+        message: `variable name "${error.name}" must be a lowercase letter, then up to 31 lowercase letters, digits or underscores`,
+        params: { name: error.name },
+      });
+    } else {
+      issues.push({
+        ...at(id),
+        code: 'template_syntax',
+        message: `node "${id}" ${field} has a malformed placeholder: ${TEMPLATE_REASONS[error.kind]}`,
+        params: { field, reason: TEMPLATE_REASONS[error.kind] },
+      });
+    }
+  };
+  for (const [field, prompt] of nodePromptSlots(node)) {
+    if (typeof prompt === 'string') scan(field, prompt);
+    else if (typeof prompt.template === 'string') scan(`${field}.template`, prompt.template);
+  }
+  if (node.kind === 'menu') {
+    for (const key of Object.keys(node.options).sort()) {
+      scan(`options.${key}`, node.options[key] ?? '');
+    }
+  }
+
+  // Everything else: any string value holding `{{` is out of place. A
+  // `note` is a comment for people, never read by the engine, so it is
+  // never scanned (nor is the flow's own note, see `checkVariables`).
+  const bad: string[] = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (key !== 'exits' && key !== 'kind' && key !== 'note') collectStrayBraces(key, value, bad);
+  }
+  bad.sort();
+  if (bad.length > 0) {
+    issues.push({
+      ...at(id),
+      code: 'placeholder_not_allowed',
+      message: `node "${id}" ${JSON.stringify(bad)} holds a {{ placeholder, which is only allowed in a prompt, a prompt template or a menu label`,
+      params: { fields: bad },
+    });
+  }
+}
+
+const TEMPLATE_REASONS = {
+  unclosed: 'a `{{` or block is never closed',
+  nested: 'blocks cannot be nested',
+  mismatched: 'a block close does not match an open block',
+} as const;
+
+/** Paths of string values under `value` that hold `{{`, apart from the slots
+ * where a placeholder is allowed: a plain-string `prompt`, `confirm_prompt`
+ * or `whisper`, any `.template`, and menu `options`. */
+function collectStrayBraces(path: string, value: unknown, out: string[]): void {
+  if (typeof value === 'string') {
+    const allowed =
+      path === 'prompt' ||
+      path === 'confirm_prompt' ||
+      path === 'whisper' ||
+      path.endsWith('.template') ||
+      path.startsWith('options.');
+    if (value.includes('{{') && !allowed) out.push(path);
+  } else if (Array.isArray(value)) {
+    value.forEach((item, i) => collectStrayBraces(`${path}.${i}`, item, out));
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value))
+      collectStrayBraces(`${path}.${key}`, item, out);
   }
 }
 
@@ -375,7 +596,7 @@ function checkGraph(
 
 /** Node ids reachable from `entry` over exit edges (`entry` included when
  * it exists). */
-function reachableFromEntry(flow: Flow): Set<string> {
+export function reachableFromEntry(flow: Flow): Set<string> {
   const reachable = new Set<string>();
   if (!(flow.entry in flow.nodes)) return reachable;
   reachable.add(flow.entry);

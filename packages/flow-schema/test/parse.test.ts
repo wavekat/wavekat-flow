@@ -414,3 +414,68 @@ describe('known fields follow the schema', () => {
     }
   });
 });
+
+describe('parseFlow variables', () => {
+  const doc = (variables: string) =>
+    `schema_version: 4\nid: f\nname: F\nentry: a\nvariables:${variables}\nnodes:\n  a:\n    kind: hangup\n`;
+  const codes = (source: string) =>
+    parseFlow(source)
+      .issues.filter((i) => i.severity === 'error')
+      .map((i) => i.code);
+
+  it('decodes every field of a variable', () => {
+    const { flow, issues } = parseFlow(
+      doc('\n  q: { description: Ask, default: hi, max_len: 30 }'),
+    );
+    expect(issues).toEqual([]);
+    expect(flow?.variables).toEqual({
+      q: { description: 'Ask', default: 'hi', max_len: 30 },
+    });
+  });
+
+  it('refuses variables that is not a mapping', () => {
+    const r = parseFlow(doc(' [a, b]'));
+    expect(r.flow).toBeNull();
+    expect(codes(doc(' [a, b]'))).toEqual(['expected_map']);
+  });
+
+  it('refuses an entry that is not a mapping', () => {
+    expect(codes(doc('\n  q: nope'))).toEqual(['expected_map']);
+  });
+
+  it('refuses a variable with no default', () => {
+    expect(codes(doc('\n  q: { max_len: 30 }'))).toEqual(['missing_field']);
+  });
+
+  it('refuses a default that is not text', () => {
+    expect(codes(doc('\n  q: { default: [a] }'))).toEqual(['expected_string']);
+  });
+
+  it('accepts an empty default', () => {
+    expect(parseFlow(doc('\n  q: { default: "" }')).flow?.variables).toEqual({ q: { default: '' } });
+  });
+
+  it('refuses a max_len that is not an integer', () => {
+    expect(codes(doc('\n  q: { default: x, max_len: lots }'))).toEqual(['expected_integer']);
+  });
+});
+
+describe('parseFlow prompt template', () => {
+  const doc = (prompt: string) =>
+    `schema_version: 4\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hangup\n    prompt: ${prompt}\n`;
+
+  it('keeps the template after the transcript', () => {
+    const { flow, issues } = parseFlow(
+      doc('{ audio: vprompt_abc123, transcript: Hi there, template: "Hi {{name}}" }'),
+    );
+    expect(issues).toEqual([]);
+    expect(flow?.nodes.a).toMatchObject({
+      prompt: { audio: 'vprompt_abc123', transcript: 'Hi there', template: 'Hi {{name}}' },
+    });
+  });
+
+  it('refuses a template that is not text', () => {
+    const r = parseFlow(doc('{ audio: vprompt_abc123, template: [a] }'));
+    expect(r.issues.map((i) => i.code)).toContain('expected_string');
+  });
+});

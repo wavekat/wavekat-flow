@@ -1,0 +1,17 @@
+schema_version: 4
+id: flow_placeholder_note
+name: Placeholders in notes
+note: "Fill {{question}} per call; {{q}} is not a variable, and {{#half open is fine here."
+entry: ask
+variables:
+  question: { description: The question, default: "Anything?", max_len: 100 }
+nodes:
+  ask:
+    kind: greeting
+    note: "Speaks {{question}}. {{q}} in a note is never read."
+    prompt: "{{question}}"
+    exits: { next: bye }
+  bye:
+    kind: hangup
+    note: "{{q}}"
+    prompt: Goodbye.

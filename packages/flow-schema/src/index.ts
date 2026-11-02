@@ -21,14 +21,14 @@
 // which crashes code-gen-disallowed runtimes (Cloudflare Workers) at
 // import time. It lives behind the `@wavekat/flow-schema/structure`
 // subpath so this barrel stays Ajv-free and safe to bundle on the edge.
-import { flowV1Schema, flowV2Schema, flowV3Schema } from './generated/schema.js';
+import { flowV1Schema, flowV2Schema, flowV3Schema, flowV4Schema } from './generated/schema.js';
 
 // Model: generated types + hand-written constants & helpers.
 export * from './model.js';
 // The `book` component: its bounds, and the vocabulary a frozen-audio
 // device speaks a time with.
 export * from './book.js';
-export { flowV1Schema, flowV2Schema, flowV3Schema };
+export { flowV1Schema, flowV2Schema, flowV3Schema, flowV4Schema };
 
 // Structural diff between two flows (authoring-only, TS-only — like mutate.ts).
 export type { FieldChange, FlowDiff, FlowDiffStatus, NodeDiff } from './diff.js';
@@ -64,3 +64,14 @@ export {
   setSchemaVersion,
   stampIdentity,
 } from './mutate.js';
+
+export {
+  fill,
+  isVariableName,
+  parseTemplate,
+  templateErrorCode,
+  templateIssues,
+  templateNames,
+  tryParseTemplate,
+} from './vars.js';
+export type { FillError, Segment, TemplateError } from './vars.js';

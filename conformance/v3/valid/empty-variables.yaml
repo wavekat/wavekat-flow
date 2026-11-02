@@ -1,0 +1,8 @@
+schema_version: 3
+id: flow_empty_vars
+name: Empty variables in version 3
+entry: bye
+variables: {}
+nodes:
+  bye:
+    kind: hangup

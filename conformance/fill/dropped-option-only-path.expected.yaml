@@ -1,0 +1,13 @@
+schema_version: 3
+id: flow_dropped_path
+name: An option with its own ending
+entry: ask
+nodes:
+  ask:
+    kind: menu
+    prompt: "Press 1 for yes. Press 2 for no."
+    options: { "1": "Yes", "2": "No" }
+    exits: { "1": thanks, "2": thanks, no_input: thanks, invalid: thanks }
+  thanks:
+    kind: hangup
+    prompt: Thanks. Goodbye.

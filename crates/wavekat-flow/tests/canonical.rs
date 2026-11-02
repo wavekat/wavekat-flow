@@ -153,6 +153,7 @@ fn voicing_through_prompt_slots() {
                     *prompt = Prompt::Audio {
                         audio: format!("vprompt_{n}"),
                         transcript: Some(text.clone()),
+                        template: None,
                     };
                     n += 1;
                 }

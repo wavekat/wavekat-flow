@@ -12,7 +12,7 @@
 
 use std::time::Instant;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::NodeId;
 
@@ -88,7 +88,7 @@ pub struct TraceStep {
 
 /// The per-node outcome. Tagged so it serializes to a self-describing object
 /// the renderer can switch on.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "detail", rename_all = "snake_case")]
 pub enum StepDetail {
     /// A greeting/`say_hours` spoke and continued.
@@ -96,7 +96,13 @@ pub enum StepDetail {
     /// An `hours` branch resolved.
     Hours { open: bool },
     /// A menu caller pressed a mapped option.
-    MenuChoice { digit: String },
+    /// `label` is the pressed option's label from the flow (absent in
+    /// traces written before labels were reported).
+    MenuChoice {
+        digit: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     /// A menu exhausted its retries with no input at all.
     MenuNoInput,
     /// A menu exhausted its retries hearing only unmapped keys.

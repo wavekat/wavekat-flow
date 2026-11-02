@@ -18,13 +18,14 @@ use crate::book::{self};
 use crate::hours::{self, HoursError};
 use crate::model::{Flow, Node, Prompt};
 use crate::model_ext::NodeId;
+use crate::vars::{self, TemplateError};
 use crate::SUPPORTED_SCHEMA_VERSIONS;
 
 /// Longest a spoken (text) prompt may be. A backstop against a pasted-essay
 /// prompt that would trap a caller under minutes of TTS; generous enough that
 /// no real greeting hits it. Audio-asset prompts are unbounded here. Twin:
 /// `packages/flow-schema/src/model.ts` `MAX_PROMPT_CHARS`.
-const MAX_PROMPT_CHARS: usize = 2000;
+pub(crate) const MAX_PROMPT_CHARS: usize = 2000;
 
 /// The DTMF keys a `menu` option may be keyed by. Twin:
 /// `packages/flow-schema/src/model.ts` `VALID_DIGITS`.
@@ -39,6 +40,19 @@ const MAX_TRANSFER_TIMEOUT_SECS: i64 = 120;
 /// The oldest `schema_version` that may put `whisper` or `timeout_secs`
 /// on a `transfer`. Twin: `model.ts` `TRANSFER_FIELDS_MIN_SCHEMA_VERSION`.
 const TRANSFER_FIELDS_MIN_SCHEMA_VERSION: u32 = 3;
+
+/// The oldest `schema_version` that may declare `variables`. Twin:
+/// `model.ts` `VARIABLES_MIN_SCHEMA_VERSION`.
+const VARIABLES_MIN_SCHEMA_VERSION: u32 = 4;
+
+/// The oldest `schema_version` that may give an audio prompt a `template`.
+/// Twin: `model.ts` `TEMPLATE_MIN_SCHEMA_VERSION`.
+const TEMPLATE_MIN_SCHEMA_VERSION: u32 = 4;
+
+/// The longest a variable's `max_len` may be, in characters. The schema
+/// carries the same cap; the validators re-check it so a value built in
+/// code is held to it too. Twin: `model.ts` `MAX_VARIABLE_LEN`.
+const MAX_VARIABLE_LEN: u64 = 500;
 
 /// One thing wrong with a flow document. Carries enough context (node id,
 /// exit name, offending value) for the editor to point at it.
@@ -129,6 +143,44 @@ pub enum ValidationError {
         declared: i64,
     },
 
+    #[error("{field} needs schema_version {required} (this document declares {declared})")]
+    VariablesRequireNewerSchema {
+        field: &'static str,
+        required: u32,
+        declared: i64,
+    },
+
+    #[error("variable name {name:?} must be a lowercase letter, then up to 31 lowercase letters, digits or underscores")]
+    VariableBadName { node: Option<NodeId>, name: String },
+
+    #[error("variable {name:?} max_len is {value} (allowed: 1-{MAX_VARIABLE_LEN})")]
+    VariableMaxLenOutOfRange { name: String, value: u64 },
+
+    #[error("variable {name:?} default is {len} characters; its max_len is {max}")]
+    VariableDefaultTooLong { name: String, max: u64, len: u64 },
+
+    #[error("node {node:?} {field} has a malformed placeholder: {reason}")]
+    TemplateSyntax {
+        node: NodeId,
+        field: String,
+        reason: String,
+    },
+
+    #[error(
+        "node {node:?} {field} uses {name:?}, which the flow does not declare under variables"
+    )]
+    UnknownVariable {
+        node: NodeId,
+        field: String,
+        name: String,
+    },
+
+    #[error("{} holds a {{{{ placeholder, which is only allowed in a prompt, a prompt template or a menu label", .node.as_ref().map(|n| format!("node {n:?} {fields:?}")).unwrap_or_else(|| format!("{fields:?}")))]
+    PlaceholderNotAllowed {
+        node: Option<NodeId>,
+        fields: Vec<String>,
+    },
+
     #[error("transfer node {node:?} sets timeout_secs but has no whisper to screen with")]
     TimeoutWithoutWhisper { node: NodeId },
 
@@ -181,6 +233,13 @@ impl ValidationError {
             ValidationError::BookNeverOpen { .. } => "book_never_open",
             ValidationError::KindRequiresNewerSchema { .. } => "kind_requires_newer_schema",
             ValidationError::FieldRequiresNewerSchema { .. } => "field_requires_newer_schema",
+            ValidationError::VariablesRequireNewerSchema { .. } => "field_requires_newer_schema",
+            ValidationError::VariableBadName { .. } => "variable_bad_name",
+            ValidationError::VariableMaxLenOutOfRange { .. } => "variable_max_len_out_of_range",
+            ValidationError::VariableDefaultTooLong { .. } => "variable_default_too_long",
+            ValidationError::TemplateSyntax { .. } => "template_syntax",
+            ValidationError::UnknownVariable { .. } => "unknown_variable",
+            ValidationError::PlaceholderNotAllowed { .. } => "placeholder_not_allowed",
             ValidationError::TimeoutWithoutWhisper { .. } => "timeout_without_whisper",
             ValidationError::TransferTimeoutOutOfRange { .. } => "transfer_timeout_out_of_range",
             ValidationError::OutboundNodeNotAllowed { .. } => "outbound_node_not_allowed",
@@ -213,6 +272,11 @@ fn kind_min_schema_version(kind: &str) -> i64 {
 ///
 /// Twin: `model.ts` `requiredSchemaVersion`.
 pub fn required_schema_version(flow: &Flow) -> i64 {
+    let variables = if !flow.variables.is_empty() {
+        i64::from(VARIABLES_MIN_SCHEMA_VERSION)
+    } else {
+        1
+    };
     flow.nodes
         .values()
         .map(|node| {
@@ -226,10 +290,18 @@ pub fn required_schema_version(flow: &Flow) -> i64 {
                 }
                 _ => 1,
             };
-            kind_min_schema_version(node.kind()).max(fields)
+            let template = if node.prompts().iter().any(|p| p.template().is_some()) {
+                i64::from(TEMPLATE_MIN_SCHEMA_VERSION)
+            } else {
+                1
+            };
+            kind_min_schema_version(node.kind())
+                .max(fields)
+                .max(template)
         })
         .max()
         .unwrap_or(1)
+        .max(variables)
 }
 
 /// Validate a parsed flow. `Ok(())` means safe to publish / execute; `Err`
@@ -246,6 +318,16 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
         ));
     }
 
+    if !flow.variables.is_empty() && flow.schema_version < i64::from(VARIABLES_MIN_SCHEMA_VERSION) {
+        errs.push(ValidationError::VariablesRequireNewerSchema {
+            field: "variables",
+            required: VARIABLES_MIN_SCHEMA_VERSION,
+            declared: flow.schema_version,
+        });
+    }
+
+    check_variables(flow, &mut errs);
+
     if flow.nodes.is_empty() {
         errs.push(ValidationError::EmptyFlow);
         return Err(errs); // graph checks below would be meaningless
@@ -260,6 +342,8 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
         check_exits(id, node, flow, &mut errs);
         check_node(id, node, &mut errs);
         check_transfer_fields_version(id, node, flow.schema_version, &mut errs);
+        check_template_version(id, node, flow.schema_version, &mut errs);
+        check_placeholders(id, node, flow, &mut errs);
 
         // A component the document's own version doesn't have. Checked
         // per node rather than once per flow so the editor points at the
@@ -287,6 +371,148 @@ pub fn validate(flow: &Flow) -> Result<(), Vec<ValidationError>> {
         Ok(())
     } else {
         Err(errs)
+    }
+}
+
+/// Declared variable names, `max_len`s and defaults, and placeholder-looking
+/// text in the flow's own `id` and `name` (its `note` is a comment and never
+/// scanned). Only on a v4 document: before that `{{` is ordinary text and
+/// `variables` is refused as a whole.
+fn check_variables(flow: &Flow, errs: &mut Vec<ValidationError>) {
+    if flow.schema_version < i64::from(VARIABLES_MIN_SCHEMA_VERSION) {
+        return;
+    }
+    let mut names: Vec<&String> = flow.variables.keys().collect();
+    names.sort();
+    for name in names {
+        if !vars::is_variable_name(name) {
+            errs.push(ValidationError::VariableBadName {
+                node: None,
+                name: name.clone(),
+            });
+        }
+        let max_len = flow.variables[name].max_len.get();
+        if max_len > MAX_VARIABLE_LEN {
+            errs.push(ValidationError::VariableMaxLenOutOfRange {
+                name: name.clone(),
+                value: max_len,
+            });
+        }
+        // A default is held to the same limit as a caller's value.
+        let len = flow.variables[name].default.chars().count() as u64;
+        if len > max_len {
+            errs.push(ValidationError::VariableDefaultTooLong {
+                name: name.clone(),
+                max: max_len,
+                len,
+            });
+        }
+    }
+    let mut fields: Vec<String> = [("id", &flow.id), ("name", &flow.name)]
+        .into_iter()
+        .filter(|(_, v)| v.contains("{{"))
+        .map(|(k, _)| k.to_string())
+        .collect();
+    fields.sort();
+    if !fields.is_empty() {
+        errs.push(ValidationError::PlaceholderNotAllowed { node: None, fields });
+    }
+}
+
+/// Check every place a node may hold a placeholder (string prompts, an
+/// audio prompt's `template`, menu option labels) against the declared
+/// variables, and refuse `{{` in any other string field. A v1-v3 document
+/// is skipped entirely: there `{{` is text to be spoken as written.
+fn check_placeholders(id: &NodeId, node: &Node, flow: &Flow, errs: &mut Vec<ValidationError>) {
+    if flow.schema_version < i64::from(VARIABLES_MIN_SCHEMA_VERSION) {
+        return;
+    }
+    let mut scan = |field: String, text: &str| match vars::parse_template(text) {
+        Ok(_) => {
+            for name in vars::template_names(text) {
+                if !flow.variables.contains_key(&name) {
+                    errs.push(ValidationError::UnknownVariable {
+                        node: id.clone(),
+                        field: field.clone(),
+                        name,
+                    });
+                }
+            }
+        }
+        Err(TemplateError::BadName(name)) => errs.push(ValidationError::VariableBadName {
+            node: Some(id.clone()),
+            name,
+        }),
+        Err(e) => errs.push(ValidationError::TemplateSyntax {
+            node: id.clone(),
+            field,
+            reason: e.to_string(),
+        }),
+    };
+    for (field, prompt) in node.prompt_slots() {
+        match prompt {
+            Prompt::Text(text) => scan(field.to_string(), text),
+            Prompt::Audio { .. } => {
+                if let Some(template) = prompt.template() {
+                    scan(format!("{field}.template"), template);
+                }
+            }
+        }
+    }
+    if let Node::Menu { options, .. } = node {
+        let mut keys: Vec<&String> = options.keys().collect();
+        keys.sort();
+        for key in keys {
+            scan(format!("options.{key}"), &options[key]);
+        }
+    }
+
+    // Everything else: any string value holding `{{` is out of place. A
+    // `note` is a comment for people, never read by the engine, so it is
+    // never scanned (nor is the flow's own note, see `check_variables`).
+    let Ok(serde_json::Value::Object(map)) = serde_json::to_value(node) else {
+        return;
+    };
+    let mut bad = Vec::new();
+    for (key, value) in &map {
+        if !matches!(key.as_str(), "exits" | "kind" | "note") {
+            collect_stray_braces(key, value, &mut bad);
+        }
+    }
+    bad.sort();
+    if !bad.is_empty() {
+        errs.push(ValidationError::PlaceholderNotAllowed {
+            node: Some(id.clone()),
+            fields: bad,
+        });
+    }
+}
+
+/// Paths of string values under `value` that hold `{{`, apart from the
+/// slots where a placeholder is allowed: a plain-string `prompt`,
+/// `confirm_prompt` or `whisper`, any `.template`, and menu `options`.
+fn collect_stray_braces(path: &str, value: &serde_json::Value, out: &mut Vec<String>) {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => {
+            let allowed = matches!(path, "prompt" | "confirm_prompt" | "whisper")
+                || path.ends_with(".template")
+                || path.starts_with("options.");
+            if s.contains("{{") && !allowed {
+                out.push(path.to_string());
+            }
+        }
+        Value::Array(items) => {
+            for (i, item) in items.iter().enumerate() {
+                collect_stray_braces(&format!("{path}.{i}"), item, out);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map {
+                collect_stray_braces(&format!("{path}.{key}"), item, out);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -322,6 +548,27 @@ fn check_transfer_fields_version(
                 declared,
             });
         }
+    }
+}
+
+/// `template` on an audio prompt of a document older than the version that
+/// has it. One error per node, whichever prompt carries it.
+fn check_template_version(
+    id: &NodeId,
+    node: &Node,
+    declared: i64,
+    errs: &mut Vec<ValidationError>,
+) {
+    if declared >= i64::from(TEMPLATE_MIN_SCHEMA_VERSION) {
+        return;
+    }
+    if node.prompts().iter().any(|p| p.template().is_some()) {
+        errs.push(ValidationError::FieldRequiresNewerSchema {
+            node: id.clone(),
+            field: "template",
+            required: TEMPLATE_MIN_SCHEMA_VERSION,
+            declared,
+        });
     }
 }
 
@@ -465,7 +712,7 @@ fn unbounded_loop_nodes(flow: &Flow) -> Vec<&str> {
 
 /// Node ids reachable from `entry` over exit edges (`entry` included when
 /// it exists).
-fn reachable_from_entry(flow: &Flow) -> BTreeSet<&str> {
+pub(crate) fn reachable_from_entry(flow: &Flow) -> BTreeSet<&str> {
     let mut reachable: BTreeSet<&str> = BTreeSet::new();
     let Some((entry, _)) = flow.nodes.get_key_value(&flow.entry) else {
         return reachable;
@@ -1522,5 +1769,176 @@ nodes:
             .replace("  bye:\n    kind: hangup\n", "");
         assert_eq!(validate(&parse(&src)), Ok(()));
         assert_eq!(validate_outbound(&parse(&src)), Ok(()));
+    }
+    // ── flow variables ───────────────────────────────────────────────────
+    const WITH_VARIABLES: &str = "schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n  q: { default: hi }\nnodes:\n  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n";
+
+    #[test]
+    fn variables_need_v4() {
+        let flow = parse(WITH_VARIABLES);
+        assert_eq!(required_schema_version(&flow), 4);
+        assert_eq!(validate(&flow), Ok(()));
+    }
+
+    #[test]
+    fn variables_in_v3_are_refused() {
+        let src = WITH_VARIABLES.replace("schema_version: 4", "schema_version: 3");
+        let errs = validate(&parse(&src)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![ValidationError::VariablesRequireNewerSchema {
+                field: "variables",
+                required: 4,
+                declared: 3,
+            }]
+        );
+        assert_eq!(errs[0].code(), "field_requires_newer_schema");
+    }
+
+    #[test]
+    fn empty_variables_are_no_variables() {
+        let src = WITH_VARIABLES
+            .replace("schema_version: 4", "schema_version: 3")
+            .replace("  q: { default: hi }\n", "")
+            .replace("variables:\n", "variables: {}\n");
+        let flow = parse(&src);
+        assert_eq!(required_schema_version(&flow), 1);
+        assert_eq!(validate(&flow), Ok(()));
+    }
+
+    const WITH_TEMPLATE: &str = "schema_version: 4\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hangup\n    prompt: { audio: vprompt_abc123, template: \"Hi {{name}}\" }\n";
+
+    #[test]
+    fn template_needs_v4() {
+        let declared =
+            WITH_TEMPLATE.replace("nodes:", "variables:\n  name: { default: there }\nnodes:");
+        let flow = parse(&declared);
+        assert_eq!(required_schema_version(&flow), 4);
+        assert_eq!(validate(&flow), Ok(()));
+        let plain = WITH_TEMPLATE.replace(", template: \"Hi {{name}}\"", "");
+        assert_eq!(required_schema_version(&parse(&plain)), 1);
+    }
+
+    #[test]
+    fn template_in_v3_is_refused() {
+        let src = WITH_TEMPLATE.replace("schema_version: 4", "schema_version: 3");
+        let errs = validate(&parse(&src)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![ValidationError::FieldRequiresNewerSchema {
+                node: "a".into(),
+                field: "template",
+                required: 4,
+                declared: 3,
+            }]
+        );
+        assert_eq!(errs[0].code(), "field_requires_newer_schema");
+    }
+
+    fn v4_flow(vars: &str, nodes: &str) -> String {
+        format!("schema_version: 4\nid: f\nname: F\nentry: a\nvariables:\n{vars}\nnodes:\n{nodes}")
+    }
+
+    const Q: &str = "  q: { default: \"x\" }\n";
+
+    #[test]
+    fn v4_placeholder_must_be_declared() {
+        let f = v4_flow(
+            Q,
+            "  a:\n    kind: hangup\n    prompt: \"Hi {{q}} {{ghost}}\"\n",
+        );
+        assert_eq!(codes(&f), vec!["unknown_variable"]);
+        let ok = v4_flow(Q, "  a:\n    kind: hangup\n    prompt: \"Hi {{q}}\"\n");
+        assert_eq!(validate(&parse(&ok)), Ok(()));
+    }
+
+    #[test]
+    fn v4_menu_labels_and_templates_are_scanned() {
+        let f = v4_flow(
+            Q,
+            "  a:\n    kind: menu\n    prompt: { audio: vprompt_ab12, template: \"{{nope}}\" }\n    options: { \"1\": \"{{q}}\", \"2\": \"{{bad}}\" }\n    exits: { \"1\": b, \"2\": b, no_input: b, invalid: b }\n  b:\n    kind: hangup\n    prompt: bye\n",
+        );
+        assert_eq!(codes(&f), vec!["unknown_variable", "unknown_variable"]);
+    }
+
+    #[test]
+    fn v4_bad_template_syntax_and_names() {
+        let f = v4_flow(Q, "  a:\n    kind: hangup\n    prompt: \"{{#q}} open\"\n");
+        assert_eq!(codes(&f), vec!["template_syntax"]);
+        let f = v4_flow(Q, "  a:\n    kind: hangup\n    prompt: \"{{Q}}\"\n");
+        assert_eq!(codes(&f), vec!["variable_bad_name"]);
+    }
+
+    #[test]
+    fn v4_declared_names_must_fit_the_pattern() {
+        let f = v4_flow(
+            "  Bad: { default: \"\" }\n",
+            "  a:\n    kind: hangup\n    prompt: bye\n",
+        );
+        assert_eq!(codes(&f), vec!["variable_bad_name"]);
+    }
+
+    #[test]
+    fn v4_max_len_is_capped() {
+        let f = v4_flow(
+            "  q: { default: \"\", max_len: 501 }\n",
+            "  a:\n    kind: hangup\n    prompt: bye\n",
+        );
+        assert_eq!(codes(&f), vec!["variable_max_len_out_of_range"]);
+    }
+
+    #[test]
+    fn v4_default_must_fit_max_len() {
+        // Counted in characters, like a caller's value.
+        let f = v4_flow(
+            "  q: { default: \"问问问\", max_len: 2 }\n",
+            "  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n",
+        );
+        let errs = validate(&parse(&f)).unwrap_err();
+        assert_eq!(
+            errs,
+            vec![ValidationError::VariableDefaultTooLong {
+                name: "q".into(),
+                max: 2,
+                len: 3
+            }]
+        );
+        assert_eq!(errs[0].code(), "variable_default_too_long");
+        let ok = v4_flow(
+            "  q: { default: \"问问\", max_len: 2 }\n",
+            "  a:\n    kind: hangup\n    prompt: \"{{q}}\"\n",
+        );
+        assert_eq!(validate(&parse(&ok)), Ok(()));
+    }
+
+    #[test]
+    fn notes_are_never_scanned_for_placeholders() {
+        let f = parse(&format!(
+            "schema_version: 4\nid: f\nname: F\nnote: \"{{{{ghost}}}} {{{{#x\"\nentry: a\nvariables:\n{Q}nodes:\n  a:\n    kind: hangup\n    note: \"{{{{ghost}}}} {{{{#x\"\n    prompt: \"{{{{q}}}}\"\n"
+        ));
+        assert_eq!(validate(&f), Ok(()));
+    }
+
+    #[test]
+    fn placeholder_in_transfer_target_is_refused() {
+        let f = v4_flow(Q, "  a:\n    kind: transfer\n    target: \"{{q}}\"\n");
+        assert_eq!(codes(&f), vec!["placeholder_not_allowed"]);
+    }
+
+    #[test]
+    fn placeholder_in_a_transcript_is_refused() {
+        let f = v4_flow(
+            Q,
+            "  a:\n    kind: hangup\n    prompt: { audio: vprompt_ab12, transcript: \"Hi {{q}}\" }\n",
+        );
+        assert_eq!(codes(&f), vec!["placeholder_not_allowed"]);
+    }
+
+    #[test]
+    fn v3_braces_are_plain_text() {
+        let f = parse(
+            "schema_version: 3\nid: f\nname: F\nentry: a\nnodes:\n  a:\n    kind: hangup\n    prompt: \"Press {{1}} now }} {{#x\"\n",
+        );
+        assert_eq!(validate(&f), Ok(()));
     }
 }

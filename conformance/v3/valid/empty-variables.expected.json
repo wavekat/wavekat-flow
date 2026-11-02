@@ -1,0 +1,5 @@
+{
+  "description": "An empty `variables` map declares nothing, so it is the same as no map: a version 3 document may carry it. Only a non-empty map needs version 4.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

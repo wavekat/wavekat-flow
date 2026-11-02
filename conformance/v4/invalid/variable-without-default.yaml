@@ -1,0 +1,10 @@
+schema_version: 4
+id: flow_var_no_default
+name: Variable with no default
+entry: bye
+variables:
+  question: { description: The question, max_len: 300 }
+nodes:
+  bye:
+    kind: hangup
+    prompt: "{{question}}"

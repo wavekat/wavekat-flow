@@ -1,0 +1,14 @@
+schema_version: 4
+id: flow_rendered_template
+name: A prompt voiced with its defaults
+entry: ask
+variables:
+  name: { description: Who is called, default: "there", max_len: 40 }
+nodes:
+  ask:
+    kind: greeting
+    prompt: { audio: vprompt_abc123, template: "Hi {{name}}" }
+    exits: { next: bye }
+  bye:
+    kind: hangup
+    prompt: Goodbye.

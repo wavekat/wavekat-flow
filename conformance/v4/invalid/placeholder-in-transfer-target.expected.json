@@ -1,0 +1,5 @@
+{
+  "description": "Placeholders are only for a prompt, an audio prompt's template and a menu label. A transfer target is never filled in, so a `{{` there is refused rather than dialled.",
+  "structurallyValid": true,
+  "semantic": { "ok": false, "errors": ["placeholder_not_allowed"] }
+}

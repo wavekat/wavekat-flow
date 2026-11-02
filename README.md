@@ -69,7 +69,7 @@ code per language — **pinned by the shared corpus**, not generated. See
 
 ## Versioning
 
-- `schema_version` is a property of the **document** (currently `3`). Each
+- `schema_version` is a property of the **document** (currently `4`). Each
   version gets its own `schema/flow.vN.schema.json` and its own frozen
   `conformance/vN/` corpus. Growth is additive; an unsupported version is
   rejected, never silently migrated.

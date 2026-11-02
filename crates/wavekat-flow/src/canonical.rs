@@ -12,12 +12,12 @@ use std::sync::OnceLock;
 
 use serde_json::{Map, Value};
 
-use crate::{Flow, FLOW_V3_SCHEMA};
+use crate::{Flow, FLOW_V4_SCHEMA};
 
 /// The newest schema, which the model is generated from.
 pub(crate) fn schema() -> &'static Value {
     static SCHEMA: OnceLock<Value> = OnceLock::new();
-    SCHEMA.get_or_init(|| serde_json::from_str(FLOW_V3_SCHEMA).expect("bundled schema is JSON"))
+    SCHEMA.get_or_init(|| serde_json::from_str(FLOW_V4_SCHEMA).expect("bundled schema is JSON"))
 }
 
 /// Follow `$ref` (and a single-entry `allOf`, the schema's way of putting a

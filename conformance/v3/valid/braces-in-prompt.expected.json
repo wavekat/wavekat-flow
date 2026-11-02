@@ -1,0 +1,5 @@
+{
+  "description": "Before version 4 a `{{` in a prompt is ordinary text, spoken as written. Existing flows that happen to contain braces keep working.",
+  "structurallyValid": true,
+  "semantic": { "ok": true, "errors": [] }
+}

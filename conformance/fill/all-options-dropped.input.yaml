@@ -1,0 +1,16 @@
+schema_version: 4
+id: flow_all_options_dropped
+name: Every option optional
+entry: ask
+variables:
+  option1: { description: Answer for key 1, default: "", max_len: 80 }
+  option2: { description: Answer for key 2, default: "", max_len: 80 }
+nodes:
+  ask:
+    kind: menu
+    prompt: "Pick one.{{#option1}} Press 1 for {{option1}}.{{/option1}}{{#option2}} Press 2 for {{option2}}.{{/option2}}"
+    options: { "1": "{{option1}}", "2": "{{option2}}" }
+    exits: { "1": bye, "2": bye, no_input: bye, invalid: bye }
+  bye:
+    kind: hangup
+    prompt: Goodbye.

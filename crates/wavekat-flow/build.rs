@@ -20,7 +20,7 @@
 use std::{env, fs, path::Path};
 
 /// Oldest first; the last entry is the one the model is generated from.
-const VERSIONS: &[u32] = &[1, 2, 3];
+const VERSIONS: &[u32] = &[1, 2, 3, 4];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");

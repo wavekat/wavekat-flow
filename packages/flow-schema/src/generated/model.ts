@@ -1,4 +1,4 @@
-// GENERATED from schema/flow.v{1,2,3}.schema.json by scripts/generate.mjs — do not edit.
+// GENERATED from schema/flow.v{1,2,3,4}.schema.json by scripts/generate.mjs — do not edit.
 // Run `pnpm gen` after changing a schema; CI fails on drift.
 
 /**
@@ -16,11 +16,11 @@ export type Text = string;
 export type MessageTone = 'beep' | 'none';
 
 /**
- * The WaveKat call-flow ("Receptionist") document, schema_version 3. Version 3 is version 2 plus the screened transfer: the `transfer` node gains `whisper` and `timeout_secs`. Every version-2 document is a valid version-3 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
+ * The WaveKat call-flow ("Receptionist") document, schema_version 4. Version 4 is version 3 plus flow variables: a top-level `variables` map declares details filled in per call. Every version-3 document is a valid version-4 document once its `schema_version` is bumped, and nothing else changed. This file is the single source of truth for the document SHAPE, and — being the newest version — it is also the file both consumers generate their model types from, so one model covers every supported version. Semantic rules that a JSON Schema cannot express (graph reachability, exit-set exactness, hours/timezone math, DTMF digit validity, prompt length, per-component numeric bounds, and which components a given schema_version may use) are NOT encoded here — they live in each language's validator and are pinned by the shared conformance corpus. Unknown fields are permitted structurally, matching both implementations (Rust serde ignores them; the TS parser surfaces a non-blocking warning).
  */
 export interface Flow {
   /**
-   * Document format version. This file describes version 3 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
+   * Document format version. This file describes version 4 only; a document declaring another version validates against that version's schema file, not this one. (The type generators relax this constant to a plain integer so the generated model can hold any supported version — see scripts/generate.mjs and build.rs.) (Relaxed from a constant to a plain integer for type generation: one model type covers every supported version.)
    */
   schema_version: number;
   /**
@@ -40,6 +40,12 @@ export interface Flow {
    */
   note?: string;
   /**
+   * Details a caller of this flow fills in per call, declared by name (a lowercase letter, then up to 31 lowercase letters, digits or underscores; the validators check the form, not the schema, so a reader never has to compile a pattern). A text prompt, an audio prompt's `template` and a menu option label refer to them with `{{name}}` placeholders and `{{#name}}…{{/name}}` blocks (the block's text is kept only when the value is non-empty; blocks do not nest). The validators check that every placeholder is well formed and names a declared variable, and refuse `{{` in any other field; a `note` is a comment and is never scanned. Before a call runs, the flow is filled: each placeholder becomes the call's value, or the default when the call gives none or a blank one, and the result is a schema_version 3 document with no variables. Needs schema_version 4: a reader that ignored the map would speak the placeholders as written.
+   */
+  variables?: {
+    [k: string]: Variable;
+  };
+  /**
    * Node id where execution begins.
    */
   entry: string;
@@ -55,6 +61,24 @@ export interface Flow {
   ui?: {
     [k: string]: unknown;
   };
+  [k: string]: unknown;
+}
+/**
+ * One declared variable.
+ */
+export interface Variable {
+  /**
+   * What the value is, shown to whoever fills it in.
+   */
+  description?: string;
+  /**
+   * The value used when a call supplies none, so a flow always plays with no values given. May be an empty string, for a slot that is optional.
+   */
+  default: string;
+  /**
+   * Longest a value may be, in Unicode characters.
+   */
+  max_len?: number;
   [k: string]: unknown;
 }
 /**
@@ -79,6 +103,10 @@ export interface Audio {
    * The words this pre-rendered clip speaks — the text it was synthesized from — carried so a viewer can show what a caller hears, and for traces. Advisory only: playback always uses `audio`, never this. Optional and forward-added: absent on older documents and on refs the platform did not generate from text.
    */
   transcript?: string;
+  /**
+   * The text with `{{name}}` placeholders that `audio` was voiced from using the variables' defaults. A call that overrides a variable speaks the filled template instead of the clip; a call that does not plays `audio`. Only on an audio prompt, and only from schema_version 4: an older reader ignores it and plays the clip.
+   */
+  template?: string;
   [k: string]: unknown;
 }
 /**
@@ -152,7 +180,7 @@ export interface MenuNode {
   note?: string;
   prompt: Prompt;
   /**
-   * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator.
+   * Digit key → human label. The exit for a digit is exits[digit]. Valid digit keys are enforced by the validator. A label may hold placeholders; one that is exactly a bare `{{name}}` whose filled value is empty removes the option, its exit, and any step only that exit led to, from the call.
    */
   options: {
     [k: string]: string;
